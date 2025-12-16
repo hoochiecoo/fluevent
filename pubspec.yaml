@@ -1,5 +1,5 @@
-name: camera_starter
-description: Final Fixed Project.
+name: tennis_detector
+description: ML Kit Object & Scene Detection.
 publish_to: 'none'
 version: 1.0.0+1
 environment:

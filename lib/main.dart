@@ -10,6 +10,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.orange,
+        scaffoldBackgroundColor: const Color(0xFF2C3E50),
+      ),
       home: const CameraScreen(),
     );
   }
@@ -25,45 +29,83 @@ class _CameraScreenState extends State<CameraScreen> {
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
   int? _textureId;
-  String _data = "Waiting for stream...";
+  
+  // Data State
+  String _sceneData = "Scanning...";
+  String _objectData = "No objects";
+  bool _isCourt = false;
 
   @override
   void initState() {
     super.initState();
     _startCamera();
     _eventChannel.receiveBroadcastStream().listen((event) {
-      if(mounted) setState(() => _data = event.toString());
+      if(mounted) {
+        final Map data = event as Map;
+        setState(() {
+          _sceneData = data['scene'] ?? "";
+          _objectData = data['objects'] ?? "";
+          
+          // Simple logic to detect court keywords
+          String lowerScene = _sceneData.toLowerCase();
+          _isCourt = lowerScene.contains("court") || 
+                     lowerScene.contains("tennis") || 
+                     lowerScene.contains("stadium");
+        });
+      }
     });
   }
 
   Future<void> _startCamera() async {
     try {
       final tid = await _methodChannel.invokeMethod('startCamera');
-      if(mounted) setState(() => _textureId = tid);
+      setState(() => _textureId = tid);
     } catch (e) {
-      if(mounted) setState(() => _data = "Error: $e");
+      print("Error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("CameraX Ready")),
+      appBar: AppBar(title: const Text("Detector AI"), backgroundColor: Colors.black45),
       body: Column(
         children: [
           Expanded(
-            child: Container(
-              color: Colors.black,
-              child: _textureId == null 
-                  ? const Center(child: CircularProgressIndicator())
-                  : Texture(textureId: _textureId!),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _textureId == null 
+                    ? const Center(child: CircularProgressIndicator())
+                    : Texture(textureId: _textureId!),
+                
+                // Overlay for Court Detection
+                if (_isCourt)
+                  Positioned(
+                    top: 20, right: 20,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
+                      child: const Text("🎾 TENNIS COURT DETECTED", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  )
+              ],
             ),
           ),
           Container(
             padding: const EdgeInsets.all(20),
-            color: Colors.white,
+            color: Colors.black87,
             width: double.infinity,
-            child: Text("Analysis: $_data", style: const TextStyle(fontSize: 18)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("SCENE ANALYSIS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(_sceneData, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                const Text("POSSIBLE ROUND OBJECTS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
+              ],
+            ),
           )
         ],
       ),
