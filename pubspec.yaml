@@ -1,5 +1,5 @@
-name: camera_starter
-description: Final Fixed Project.
+name: camera_detector
+description: CameraX Line Detector Project
 publish_to: 'none'
 version: 1.0.0+1
 environment:

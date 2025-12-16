@@ -3,11 +3,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
-        android:label="camera_starter"
+        android:label="Line Detector"
         android:name="${applicationName}"
-        android:icon="@drawable/ic_launcher"> 
-        <!-- Changed icon to @drawable because we generated an XML icon -->
-        
+        android:icon="@drawable/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
