@@ -5,7 +5,8 @@
     <application
         android:label="Tennis Detector"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"> 
+        android:icon="@drawable/ic_launcher">  <!-- CHANGED FROM MIPMAP TO DRAWABLE -->
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"

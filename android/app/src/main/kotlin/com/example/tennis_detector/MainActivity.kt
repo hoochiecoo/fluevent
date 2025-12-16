@@ -13,7 +13,6 @@ import io.flutter.plugin.common.EventChannel
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 
-// ML Kit Imports
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
@@ -28,19 +27,14 @@ class MainActivity: FlutterActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
 
-    // 1. Image Labeler (For Court detection)
     private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
 
-    // 2. Object Detector (For Balls/Round objects)
-    // Stream mode is faster but less accurate, Single Image mode is accurate.
-    // We enable classification to find "Ball" category.
     private val objectOptions = ObjectDetectorOptions.Builder()
         .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
         .enableClassification()
         .build()
     private val objectDetector = ObjectDetection.getClient(objectOptions)
 
-    // To prevent spamming Flutter channel
     private var lastUpdate = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -108,36 +102,27 @@ class MainActivity: FlutterActivity() {
         if (mediaImage != null) {
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             
-            // We run two detectors. Note: This is heavy operation.
-            // 1. Detect Objects
             objectDetector.process(image)
                 .addOnSuccessListener { objects ->
-                    
                     val roundObjects = ArrayList<String>()
                     
                     for (obj in objects) {
                         val bounds = obj.boundingBox
-                        // LOGIC: Check Aspect Ratio (Width / Height)
-                        // If it is close to 1.0 (e.g., 0.8 to 1.2), it is likely square or circular.
                         val ratio = bounds.width().toFloat() / bounds.height().toFloat()
                         val isGeometricCircle = ratio > 0.8 && ratio < 1.2
 
-                        // LOGIC: Check Labels
                         var labelText = "Unknown"
                         if (obj.labels.isNotEmpty()) {
                             labelText = obj.labels[0].text
                         }
 
-                        // Filter for relevant items
                         if (isGeometricCircle || labelText.contains("Ball", true)) {
                             roundObjects.add("$labelText (Ratio: ${String.format("%.2f", ratio)})")
                         }
                     }
 
-                    // 2. Detect Scene (Nested to ensure sequential execution or use Tasks.whenAll)
                     labeler.process(image)
                         .addOnSuccessListener { labels ->
-                            // Filter scene labels
                             val relevantScenes = labels
                                 .filter { it.confidence > 0.6 }
                                 .map { it.text }
@@ -146,9 +131,8 @@ class MainActivity: FlutterActivity() {
 
                             val objStr = if(roundObjects.isEmpty()) "None" else roundObjects.joinToString(", ")
 
-                            // Send to Flutter
                             val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastUpdate > 200) { // Limit updates to 5fps for UI
+                            if (currentTime - lastUpdate > 200) {
                                 lastUpdate = currentTime
                                 runOnUiThread {
                                     val map = HashMap<String, String>()

@@ -30,7 +30,6 @@ class _CameraScreenState extends State<CameraScreen> {
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
   int? _textureId;
   
-  // Data State
   String _sceneData = "Scanning...";
   String _objectData = "No objects";
   bool _isCourt = false;
@@ -46,11 +45,11 @@ class _CameraScreenState extends State<CameraScreen> {
           _sceneData = data['scene'] ?? "";
           _objectData = data['objects'] ?? "";
           
-          // Simple logic to detect court keywords
           String lowerScene = _sceneData.toLowerCase();
           _isCourt = lowerScene.contains("court") || 
                      lowerScene.contains("tennis") || 
-                     lowerScene.contains("stadium");
+                     lowerScene.contains("stadium") ||
+                     lowerScene.contains("grass");
         });
       }
     });
@@ -79,7 +78,6 @@ class _CameraScreenState extends State<CameraScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : Texture(textureId: _textureId!),
                 
-                // Overlay for Court Detection
                 if (_isCourt)
                   Positioned(
                     top: 20, right: 20,
