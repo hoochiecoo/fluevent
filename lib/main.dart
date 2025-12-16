@@ -2,19 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CameraX Texture',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
       home: const CameraScreen(),
     );
   }
@@ -22,7 +17,6 @@ class MyApp extends StatelessWidget {
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
-
   @override
   State<CameraScreen> createState() => _CameraScreenState();
 }
@@ -30,66 +24,46 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
-
   int? _textureId;
-  String _analysisResult = "Waiting for data...";
-  String _error = "";
+  String _data = "Waiting...";
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
-    _subscribeToAnalysis();
-  }
-
-  Future<void> _initializeCamera() async {
-    try {
-      final int textureId = await _methodChannel.invokeMethod('startCamera');
-      setState(() {
-        _textureId = textureId;
-      });
-    } on PlatformException catch (e) {
-      setState(() {
-        _error = "Error: ${e.message}";
-      });
-    }
-  }
-
-  void _subscribeToAnalysis() {
+    _startCamera();
     _eventChannel.receiveBroadcastStream().listen((event) {
-      setState(() {
-        _analysisResult = event.toString();
-      });
+      setState(() => _data = event.toString());
     });
+  }
+
+  Future<void> _startCamera() async {
+    try {
+      final tid = await _methodChannel.invokeMethod('startCamera');
+      setState(() => _textureId = tid);
+    } catch (e) {
+      setState(() => _data = "Error: $e");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("CI/CD Camera Build")),
+      appBar: AppBar(title: const Text("CameraX Fix")),
       body: Column(
         children: [
           Expanded(
             child: Container(
               color: Colors.black,
-              child: Center(
-                child: _textureId == null
-                    ? (_error.isNotEmpty 
-                        ? Text(_error, style: const TextStyle(color: Colors.red)) 
-                        : const CircularProgressIndicator())
-                    : AspectRatio(
-                        aspectRatio: 3.0 / 4.0,
-                        child: Texture(textureId: _textureId!),
-                      ),
-              ),
+              child: _textureId == null 
+                  ? const Center(child: CircularProgressIndicator())
+                  : Texture(textureId: _textureId!),
             ),
           ),
           Container(
             padding: const EdgeInsets.all(20),
             width: double.infinity,
             color: Colors.white,
-            child: Text("Native Data: $_analysisResult", 
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: Text("Data: $_data", style: const TextStyle(fontSize: 20)),
           )
         ],
       ),
