@@ -1,5 +1,5 @@
-name: camera_starter
-description: Final Fixed Project.
+name: lane_detector
+description: Real-time Road Lane Detection.
 publish_to: 'none'
 version: 1.0.0+1
 environment:
@@ -7,7 +7,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
