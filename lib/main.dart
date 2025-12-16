@@ -10,6 +10,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(primarySwatch: Colors.deepPurple),
       home: const CameraScreen(),
     );
   }
@@ -25,14 +26,17 @@ class _CameraScreenState extends State<CameraScreen> {
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
   int? _textureId;
-  String _data = "Waiting for stream...";
+  String _data = "Waiting for faces...";
 
   @override
   void initState() {
     super.initState();
     _startCamera();
     _eventChannel.receiveBroadcastStream().listen((event) {
+      // Receive ML Kit data here
       if(mounted) setState(() => _data = event.toString());
+    }, onError: (e) {
+      if(mounted) setState(() => _data = "Stream Error: $e");
     });
   }
 
@@ -41,14 +45,14 @@ class _CameraScreenState extends State<CameraScreen> {
       final tid = await _methodChannel.invokeMethod('startCamera');
       if(mounted) setState(() => _textureId = tid);
     } catch (e) {
-      if(mounted) setState(() => _data = "Error: $e");
+      if(mounted) setState(() => _data = "Start Error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("CameraX Ready")),
+      appBar: AppBar(title: const Text("ML Kit Face Detector")),
       body: Column(
         children: [
           Expanded(
@@ -60,10 +64,17 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             color: Colors.white,
             width: double.infinity,
-            child: Text("Analysis: $_data", style: const TextStyle(fontSize: 18)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Detection Results:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                Text(_data, style: const TextStyle(fontSize: 18, color: Colors.deepPurple)),
+              ],
+            ),
           )
         ],
       ),

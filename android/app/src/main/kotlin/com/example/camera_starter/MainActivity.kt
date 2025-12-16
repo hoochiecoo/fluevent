@@ -9,16 +9,32 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
+
+// CameraX
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+
+// ML Kit Imports
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
+
 import java.util.concurrent.Executors
-import kotlin.random.Random
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
+
+    // 1. Configure ML Kit Options
+    private val faceOptions = FaceDetectorOptions.Builder()
+        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+        .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL) // For smile/eyes
+        .build()
+        
+    private val faceDetector = FaceDetection.getClient(faceOptions)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -61,14 +77,14 @@ class MainActivity: FlutterActivity() {
                 request.provideSurface(surface, cameraExecutor) {}
             }
 
+            // 2. Set up ImageAnalyzer
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
             
-            imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
-                val v = Random.nextInt(0, 100)
-                runOnUiThread { eventSink?.success("Brightness: $v%") }
-                image.close()
+            // 3. Connect ML Kit Logic
+            imageAnalyzer.setAnalyzer(cameraExecutor) { imageProxy ->
+                processImageProxy(imageProxy)
             }
 
             try {
@@ -79,6 +95,42 @@ class MainActivity: FlutterActivity() {
         }, ContextCompat.getMainExecutor(this))
 
         return textureId
+    }
+
+    // 4. ML Processing Function
+    @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+    private fun processImageProxy(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image
+        if (mediaImage != null) {
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            
+            faceDetector.process(image)
+                .addOnSuccessListener { faces ->
+                    // Prepare result string
+                    if (faces.isEmpty()) {
+                         runOnUiThread { eventSink?.success("No faces detected") }
+                    } else {
+                        val face = faces[0]
+                        val smileProb = face.smilingProbability ?: 0f
+                        val leftEye = face.leftEyeOpenProbability ?: 0f
+                        
+                        val msg = "Faces: ${faces.size}\n" +
+                                  "Smile: ${(smileProb * 100).toInt()}%\n" +
+                                  "Left Eye: ${(leftEye * 100).toInt()}%"
+                        
+                        runOnUiThread { eventSink?.success(msg) }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    runOnUiThread { eventSink?.success("Error: ${e.message}") }
+                }
+                .addOnCompleteListener {
+                    // CRITICAL: Close imageProxy when done
+                    imageProxy.close()
+                }
+        } else {
+            imageProxy.close()
+        }
     }
 
     private fun checkPermissions() = ContextCompat.checkSelfPermission(baseContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
