@@ -48,7 +48,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("CameraX CI Fix")),
+      appBar: AppBar(title: const Text("CameraX Ready")),
       body: Column(
         children: [
           Expanded(
@@ -63,7 +63,7 @@ class _CameraScreenState extends State<CameraScreen> {
             padding: const EdgeInsets.all(20),
             color: Colors.white,
             width: double.infinity,
-            child: Text("Data: $_data", style: const TextStyle(fontSize: 18)),
+            child: Text("Analysis: $_data", style: const TextStyle(fontSize: 18)),
           )
         ],
       ),

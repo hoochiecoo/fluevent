@@ -2,7 +2,6 @@ package com.example.camera_starter
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Bundle
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -12,14 +11,13 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.random.Random
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
-    private lateinit var cameraExecutor: ExecutorService
+    private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -45,7 +43,6 @@ class MainActivity: FlutterActivity() {
                 override fun onCancel(args: Any?) { eventSink = null }
             }
         )
-        cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
     private fun startCamera(flutterEngine: FlutterEngine): Long {
@@ -70,7 +67,7 @@ class MainActivity: FlutterActivity() {
             
             imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
                 val v = Random.nextInt(0, 100)
-                runOnUiThread { eventSink?.success("Analysis: $v") }
+                runOnUiThread { eventSink?.success("Brightness: $v%") }
                 image.close()
             }
 
@@ -85,4 +82,9 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun checkPermissions() = ContextCompat.checkSelfPermission(baseContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+    }
 }
