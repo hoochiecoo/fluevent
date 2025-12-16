@@ -3,10 +3,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <application
-        android:label="camera_starter"
+        android:label="camera_square_ui"
         android:name="${applicationName}"
         android:icon="@drawable/ic_launcher"> 
-        <!-- Changed icon to @drawable because we generated an XML icon -->
         
         <activity
             android:name=".MainActivity"
