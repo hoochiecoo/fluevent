@@ -32,16 +32,16 @@ class _CameraScreenState extends State<CameraScreen> {
     super.initState();
     _startCamera();
     _eventChannel.receiveBroadcastStream().listen((event) {
-      setState(() => _data = event.toString());
+      if(mounted) setState(() => _data = event.toString());
     });
   }
 
   Future<void> _startCamera() async {
     try {
       final tid = await _methodChannel.invokeMethod('startCamera');
-      setState(() => _textureId = tid);
+      if(mounted) setState(() => _textureId = tid);
     } catch (e) {
-      setState(() => _data = "Error: $e");
+      if(mounted) setState(() => _data = "Error: $e");
     }
   }
 

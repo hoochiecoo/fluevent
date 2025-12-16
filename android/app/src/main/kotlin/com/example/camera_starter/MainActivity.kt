@@ -69,7 +69,6 @@ class MainActivity: FlutterActivity() {
                 .build()
             
             imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
-                // Simulate processing
                 val v = Random.nextInt(0, 100)
                 runOnUiThread { eventSink?.success("Bright: $v%") }
                 image.close()
