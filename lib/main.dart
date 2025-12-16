@@ -25,7 +25,7 @@ class _CameraScreenState extends State<CameraScreen> {
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
   int? _textureId;
-  String _data = "Waiting...";
+  String _data = "Waiting for stream...";
 
   @override
   void initState() {
@@ -48,7 +48,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("CameraX Fix")),
+      appBar: AppBar(title: const Text("CameraX CI Fix")),
       body: Column(
         children: [
           Expanded(
@@ -61,9 +61,9 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
           Container(
             padding: const EdgeInsets.all(20),
-            width: double.infinity,
             color: Colors.white,
-            child: Text("Data: $_data", style: const TextStyle(fontSize: 20)),
+            width: double.infinity,
+            child: Text("Data: $_data", style: const TextStyle(fontSize: 18)),
           )
         ],
       ),

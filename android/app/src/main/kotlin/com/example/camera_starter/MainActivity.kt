@@ -32,7 +32,7 @@ class MainActivity: FlutterActivity() {
                     result.success(tid)
                 } else {
                     ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
-                    result.error("PERM", "Need Camera Permission", null)
+                    result.error("PERM", "Permissions needed", null)
                 }
             } else {
                 result.notImplemented()
@@ -70,7 +70,7 @@ class MainActivity: FlutterActivity() {
             
             imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
                 val v = Random.nextInt(0, 100)
-                runOnUiThread { eventSink?.success("Bright: $v%") }
+                runOnUiThread { eventSink?.success("Analysis: $v") }
                 image.close()
             }
 
