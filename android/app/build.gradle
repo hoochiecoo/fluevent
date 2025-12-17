@@ -20,6 +20,10 @@ android {
         versionCode 1
         versionName "1.0"
     }
+    packagingOptions {
+        pickFirst 'lib/*/libc++_shared.so'
+        pickFirst 'lib/*/libopencv_java4.so'
+    }
 }
 dependencies {
    implementation "androidx.camera:camera-core:1.3.0"

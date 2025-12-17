@@ -22,6 +22,13 @@ import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import java.io.File
+import java.io.FileOutputStream
+import org.opencv.android.Utils
 
 class MainActivity : FlutterActivity() {
 
@@ -41,17 +48,28 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             METHOD_CHANNEL
         ).setMethodCallHandler { call, result ->
-            if (call.method == "startCamera") {
-                if (checkPermissions()) {
-                    result.success(startCamera(flutterEngine))
-                } else {
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(Manifest.permission.CAMERA),
-                        101
-                    )
-                    result.error("PERM", "Camera permission needed", null)
+            when (call.method) {
+                "startCamera" -> {
+                    if (checkPermissions()) {
+                        result.success(startCamera(flutterEngine))
+                    } else {
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.CAMERA),
+                            101
+                        )
+                        result.error("PERM", "Camera permission needed", null)
+                    }
                 }
+                "processImage" -> {
+                    try {
+                        val path = processImage()
+                        result.success(path)
+                    } catch (e: Exception) {
+                        result.error("NATIVE_ERR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
 
@@ -70,6 +88,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startCamera(flutterEngine: FlutterEngine): Long {
+        // ensure OpenCV static init in case called before configure
+        OpenCVLoader.initDebug()
+
         val textureEntry = flutterEngine.renderer.createSurfaceTexture()
         val surfaceTexture = textureEntry.surfaceTexture()
         surfaceTexture.setDefaultBufferSize(640, 480)
@@ -193,6 +214,41 @@ class MainActivity : FlutterActivity() {
             this,
             Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
+
+    private fun processImage(): String {
+        // Ensure OpenCV initialized
+        OpenCVLoader.initDebug()
+
+        // Create a test bitmap
+        val bmp = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        canvas.drawColor(Color.BLUE)
+        val paint = Paint().apply { color = Color.YELLOW }
+        canvas.drawRect(100f, 100f, 400f, 400f, paint)
+
+        // OpenCV processing
+        val src = Mat()
+        Utils.bitmapToMat(bmp, src)
+        val gray = Mat()
+        Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGB2GRAY)
+        Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
+        val edges = Mat()
+        Imgproc.Canny(gray, edges, 80.0, 100.0)
+
+        val resultBmp = Bitmap.createBitmap(edges.cols(), edges.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(edges, resultBmp)
+
+        // Save to cache directory
+        val file = File(cacheDir, "opencv_result.png")
+        FileOutputStream(file).use { out ->
+            resultBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+
+        // Release resources
+        src.release(); gray.release(); edges.release()
+
+        return file.absolutePath
+    }
 
     override fun onDestroy() {
         super.onDestroy()

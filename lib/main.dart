@@ -70,6 +70,21 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  Future<void> _processImage() async {
+    try {
+      final path = await _method.invokeMethod<String>('processImage');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved: $path')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('processImage failed: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,6 +135,14 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                       ),
                     ),
+                    Positioned(
+                      right: 16,
+                      bottom: 16,
+                      child: FloatingActionButton(
+                        onPressed: _processImage,
+                        child: const Icon(Icons.memory),
+                      ),
+                    )
                   ],
                 );
               },
