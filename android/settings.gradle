@@ -27,8 +27,4 @@ plugins {
 }
 include ":app"
 
-// Optionally include OpenCV module if present (downloaded in CI)
-if (file("../opencv/sdk/java").exists()) {
-    include ":opencv"
-    project(":opencv").projectDir = file("../opencv/sdk/java")
-}
+// OpenCV Java module is not included; we link via prepackaged jniLibs instead.
