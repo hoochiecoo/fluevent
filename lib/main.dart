@@ -132,11 +132,12 @@ class PixelPainter extends CustomPainter {
       double y = p.dy;
 
       // 🔄 поворот на 90°
-      if (rotated) {
-        final tmp = x;
-        x = y;
-        y = imageW - tmp;
-      }
+    if (rotated) {
+      final tmp = x;
+      x = imageH - y;
+      y = tmp;
+    }
+
 
       final double px = x * scale + offsetX;
       final double py = y * scale + offsetY;
