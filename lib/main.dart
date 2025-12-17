@@ -30,8 +30,8 @@ class _CameraScreenState extends State<CameraScreen> {
       EventChannel('com.example.camera/events');
 
   int? _textureId;
-  int _imgW = 1;
-  int _imgH = 1;
+  int _imgW = 640; // стандартное разрешение камеры
+  int _imgH = 480;
   List<Offset> _points = [];
 
   @override
@@ -42,19 +42,14 @@ class _CameraScreenState extends State<CameraScreen> {
     _events.receiveBroadcastStream().listen((event) {
       if (!mounted || event is! Map) return;
 
-      final w = event['width'] ?? 1;
-      final h = event['height'] ?? 1;
       final pts = event['points'] ?? [];
 
       final List<Offset> parsed = [];
-
       for (final p in pts) {
         parsed.add(Offset(p[0].toDouble(), p[1].toDouble()));
       }
 
       setState(() {
-        _imgW = w;
-        _imgH = h;
         _points = parsed;
       });
     });
@@ -75,58 +70,23 @@ class _CameraScreenState extends State<CameraScreen> {
     return Scaffold(
       body: _textureId == null
           ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                if (_imgW == 0 || _imgH == 0) return const SizedBox();
-
-                final double cameraAspect = _imgW / _imgH;
-                final double screenAspect = constraints.maxWidth / constraints.maxHeight;
-
-                double displayW;
-                double displayH;
-                double offsetX = 0;
-                double offsetY = 0;
-
-                if (screenAspect > cameraAspect) {
-                  // экран шире → ограничиваем по высоте
-                  displayH = constraints.maxHeight;
-                  displayW = displayH * cameraAspect;
-                  offsetX = (constraints.maxWidth - displayW) / 2;
-                } else {
-                  // экран выше → ограничиваем по ширине
-                  displayW = constraints.maxWidth;
-                  displayH = displayW / cameraAspect;
-                  offsetY = (constraints.maxHeight - displayH) / 2;
-                }
-
-                return Stack(
+          : Center(
+              child: SizedBox(
+                width: _imgW.toDouble(),
+                height: _imgH.toDouble(),
+                child: Stack(
                   children: [
-                    Positioned(
-                      left: offsetX,
-                      top: offsetY,
-                      width: displayW,
-                      height: displayH,
-                      child: AspectRatio(
-                        aspectRatio: cameraAspect,
-                        child: Texture(textureId: _textureId!),
-                      ),
-                    ),
-                    Positioned(
-                      left: offsetX,
-                      top: offsetY,
-                      width: displayW,
-                      height: displayH,
-                      child: CustomPaint(
-                        painter: PixelPainter(
-                          points: _points,
-                          imageW: _imgW,
-                          imageH: _imgH,
-                        ),
+                    Texture(textureId: _textureId!),
+                    CustomPaint(
+                      painter: PixelPainter(
+                        points: _points,
+                        imageW: _imgW,
+                        imageH: _imgH,
                       ),
                     ),
                   ],
-                );
-              },
+                ),
+              ),
             ),
     );
   }
@@ -147,12 +107,17 @@ class PixelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (imageW == 0 || imageH == 0) return;
 
+    // Камера почти всегда отдаёт landscape, экран — portrait
     final bool rotated = imageW > imageH;
 
     final double srcW = rotated ? imageH.toDouble() : imageW.toDouble();
     final double srcH = rotated ? imageW.toDouble() : imageH.toDouble();
 
-    final double scale = size.width / srcW;
+    // используем scale = 1, так как texture уже 640x480
+    final double scale = 1.0;
+
+    final double offsetX = 0;
+    final double offsetY = 0;
 
     final paint = Paint()
       ..color = Colors.yellowAccent.withOpacity(0.7)
@@ -162,15 +127,17 @@ class PixelPainter extends CustomPainter {
       double x = p.dx;
       double y = p.dy;
 
+      // поворот 90° CW для Texture (не меняем, как ты просил)
       if (rotated) {
         final tmp = x;
         x = imageH - y;
         y = tmp;
       }
 
-      final double px = x * scale;
-      final double py = y * scale;
+      final double px = x * scale + offsetX;
+      final double py = y * scale + offsetY;
 
+      // не рисуем за пределами texture
       if (px < 0 || py < 0 || px > size.width || py > size.height) continue;
 
       canvas.drawCircle(
