@@ -12,33 +12,18 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.pub-cache
-        key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-pub-
-
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-
     - uses: subosito/flutter-action@v2
       with:
         flutter-version: '3.19.6'
-        channel: 'stable'
         cache: true
 
     - run: flutter pub get
+
+    - run: echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+
     - run: flutter build apk --debug
 
     - uses: actions/upload-artifact@v4
       with:
-        name: camera-app-debug
+        name: hoochiecoo-debug
         path: build/app/outputs/flutter-apk/app-debug.apk
