@@ -28,6 +28,8 @@ class _CameraScreenState extends State<CameraScreen> {
       MethodChannel('com.example.camera/methods');
   static const EventChannel _events =
       EventChannel('com.example.camera/events');
+  static const EventChannel _logs =
+      EventChannel('com.example.camera/logs');
 
   int? _textureId;
   int _imgW = 1;
@@ -38,6 +40,16 @@ class _CameraScreenState extends State<CameraScreen> {
   void initState() {
     super.initState();
     _startCamera();
+
+    // diagnostics stream
+    _logs.receiveBroadcastStream().listen((msg) {
+      if (!mounted) return;
+      if (msg is String) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+        );
+      }
+    });
 
     _events.receiveBroadcastStream().listen((event) {
       if (!mounted || event is! Map) return;

@@ -29,20 +29,25 @@ import android.graphics.Paint
 import java.io.File
 import java.io.FileOutputStream
 import org.opencv.android.Utils
+import android.util.Log
 
 class MainActivity : FlutterActivity() {
 
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
+    private val LOG_CHANNEL = "com.example.camera/logs"
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
+    private var logSink: EventChannel.EventSink? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         // Initialize OpenCV (uses packaged native libs). Returns false if failed.
-        OpenCVLoader.initDebug()
+        val ok = OpenCVLoader.initDebug()
+        Log.d("OpenCV", "configureFlutterEngine.initDebug=$ok")
+        logSink?.success("OpenCV init (configure): $ok")
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -85,11 +90,27 @@ class MainActivity : FlutterActivity() {
                 eventSink = null
             }
         })
+
+        // Log channel to push diagnostic messages to Flutter UI
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            LOG_CHANNEL
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(args: Any?, events: EventChannel.EventSink?) {
+                logSink = events
+            }
+
+            override fun onCancel(args: Any?) {
+                logSink = null
+            }
+        })
     }
 
     private fun startCamera(flutterEngine: FlutterEngine): Long {
         // ensure OpenCV static init in case called before configure
-        OpenCVLoader.initDebug()
+        val ok = OpenCVLoader.initDebug()
+        Log.d("OpenCV", "startCamera.initDebug=$ok")
+        logSink?.success("OpenCV init (camera): $ok")
 
         val textureEntry = flutterEngine.renderer.createSurfaceTexture()
         val surfaceTexture = textureEntry.surfaceTexture()
@@ -190,7 +211,8 @@ class MainActivity : FlutterActivity() {
                     // Release Mats
                     gray.release(); blurred.release(); edges.release()
 
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Log.e("OpenCV", "Analyzer error", e)
                 } finally {
                     image.close()
                 }
@@ -216,8 +238,12 @@ class MainActivity : FlutterActivity() {
         ) == PackageManager.PERMISSION_GRANTED
 
     private fun processImage(): String {
+        try { /* scope for early failures */ } catch (_: Throwable) {}
+
         // Ensure OpenCV initialized
-        OpenCVLoader.initDebug()
+        val ok = OpenCVLoader.initDebug()
+        Log.d("OpenCV", "processImage.initDebug=$ok")
+        logSink?.success("OpenCV init (processImage): $ok")
 
         // Create a test bitmap
         val bmp = Bitmap.createBitmap(500, 500, Bitmap.Config.ARGB_8888)
@@ -226,28 +252,36 @@ class MainActivity : FlutterActivity() {
         val paint = Paint().apply { color = Color.YELLOW }
         canvas.drawRect(100f, 100f, 400f, 400f, paint)
 
-        // OpenCV processing
-        val src = Mat()
-        Utils.bitmapToMat(bmp, src)
-        val gray = Mat()
-        Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGB2GRAY)
-        Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
-        val edges = Mat()
-        Imgproc.Canny(gray, edges, 80.0, 100.0)
+        // OpenCV processing with diagnostics
+        var src: Mat? = null
+        var gray: Mat? = null
+        var edges: Mat? = null
+        try {
+            src = Mat()
+            Utils.bitmapToMat(bmp, src)
+            gray = Mat()
+            Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGB2GRAY)
+            Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
+            edges = Mat()
+            Imgproc.Canny(gray, edges, 80.0, 100.0)
 
-        val resultBmp = Bitmap.createBitmap(edges.cols(), edges.rows(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(edges, resultBmp)
+            val resultBmp = Bitmap.createBitmap(edges.cols(), edges.rows(), Bitmap.Config.ARGB_8888)
+            Utils.matToBitmap(edges, resultBmp)
 
-        // Save to cache directory
-        val file = File(cacheDir, "opencv_result.png")
-        FileOutputStream(file).use { out ->
-            resultBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+            // Save to cache directory
+            val file = File(cacheDir, "opencv_result.png")
+            FileOutputStream(file).use { out ->
+                resultBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            return file.absolutePath
+        } catch (t: Throwable) {
+            Log.e("OpenCV", "processImage error", t)
+            throw t
+        } finally {
+            try { src?.release() } catch (_: Throwable) {}
+            try { gray?.release() } catch (_: Throwable) {}
+            try { edges?.release() } catch (_: Throwable) {}
         }
-
-        // Release resources
-        src.release(); gray.release(); edges.release()
-
-        return file.absolutePath
     }
 
     override fun onDestroy() {
