@@ -64,31 +64,63 @@ class _CameraScreenState extends State<CameraScreen> {
     setState(() => _textureId = id);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: _textureId == null
-                ? const Center(child: CircularProgressIndicator())
-                : Texture(textureId: _textureId!),
-          ),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    body: _textureId == null
+        ? const Center(child: CircularProgressIndicator())
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              // соотношение камеры
+              final cameraAspect = _imgW / _imgH;
+              final screenAspect = constraints.maxWidth / constraints.maxHeight;
 
-          Positioned.fill(
-            child: CustomPaint(
-              painter: PixelPainter(
-                points: _points,
-                imageW: _imgW,
-                imageH: _imgH,
-              ),
-            ),
+              double displayW = constraints.maxWidth;
+              double displayH = constraints.maxHeight;
+              double offsetX = 0;
+              double offsetY = 0;
+
+              if (screenAspect > cameraAspect) {
+                // экран шире, чем камера
+                displayH = constraints.maxHeight;
+                displayW = displayH * cameraAspect;
+                offsetX = (constraints.maxWidth - displayW) / 2;
+              } else {
+                // экран выше, чем камера
+                displayW = constraints.maxWidth;
+                displayH = displayW / cameraAspect;
+                offsetY = (constraints.maxHeight - displayH) / 2;
+              }
+
+              return Stack(
+                children: [
+                  Positioned(
+                    left: offsetX,
+                    top: offsetY,
+                    width: displayW,
+                    height: displayH,
+                    child: Texture(textureId: _textureId!),
+                  ),
+                  Positioned(
+                    left: offsetX,
+                    top: offsetY,
+                    width: displayW,
+                    height: displayH,
+                    child: CustomPaint(
+                      painter: PixelPainter(
+                        points: _points,
+                        imageW: _imgW,
+                        imageH: _imgH,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-        ],
-      ),
-    );
-  }
+  );
 }
+
 
 class PixelPainter extends CustomPainter {
   final List<Offset> points;
