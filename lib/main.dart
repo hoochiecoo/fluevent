@@ -77,22 +77,23 @@ class _CameraScreenState extends State<CameraScreen> {
           ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(
               builder: (context, constraints) {
-                // пропорции камеры и экрана
-                final cameraAspect = _imgW / _imgH;
-                final screenAspect = constraints.maxWidth / constraints.maxHeight;
+                if (_imgW == 0 || _imgH == 0) return const SizedBox();
 
-                double displayW = constraints.maxWidth;
-                double displayH = constraints.maxHeight;
+                final double cameraAspect = _imgW / _imgH;
+                final double screenAspect = constraints.maxWidth / constraints.maxHeight;
+
+                double displayW;
+                double displayH;
                 double offsetX = 0;
                 double offsetY = 0;
 
                 if (screenAspect > cameraAspect) {
-                  // экран шире
+                  // экран шире → ограничиваем по высоте
                   displayH = constraints.maxHeight;
                   displayW = displayH * cameraAspect;
                   offsetX = (constraints.maxWidth - displayW) / 2;
                 } else {
-                  // экран выше
+                  // экран выше → ограничиваем по ширине
                   displayW = constraints.maxWidth;
                   displayH = displayW / cameraAspect;
                   offsetY = (constraints.maxHeight - displayH) / 2;
@@ -105,7 +106,10 @@ class _CameraScreenState extends State<CameraScreen> {
                       top: offsetY,
                       width: displayW,
                       height: displayH,
-                      child: Texture(textureId: _textureId!),
+                      child: AspectRatio(
+                        aspectRatio: cameraAspect,
+                        child: Texture(textureId: _textureId!),
+                      ),
                     ),
                     Positioned(
                       left: offsetX,
@@ -143,23 +147,12 @@ class PixelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (imageW == 0 || imageH == 0) return;
 
-    // проверяем, нужно ли повернуть
     final bool rotated = imageW > imageH;
 
     final double srcW = rotated ? imageH.toDouble() : imageW.toDouble();
     final double srcH = rotated ? imageW.toDouble() : imageH.toDouble();
 
-    // BoxFit.cover
-    final double scale =
-        (size.width / srcW).compareTo(size.height / srcH) > 0
-            ? size.width / srcW
-            : size.height / srcH;
-
-    final double drawnW = srcW * scale;
-    final double drawnH = srcH * scale;
-
-    final double offsetX = (size.width - drawnW) / 2;
-    final double offsetY = (size.height - drawnH) / 2;
+    final double scale = size.width / srcW;
 
     final paint = Paint()
       ..color = Colors.yellowAccent.withOpacity(0.7)
@@ -169,15 +162,14 @@ class PixelPainter extends CustomPainter {
       double x = p.dx;
       double y = p.dy;
 
-      // поворот 90° CW для Texture
       if (rotated) {
         final tmp = x;
         x = imageH - y;
         y = tmp;
       }
 
-      final double px = x * scale + offsetX;
-      final double py = y * scale + offsetY;
+      final double px = x * scale;
+      final double py = y * scale;
 
       if (px < 0 || py < 0 || px > size.width || py > size.height) continue;
 
