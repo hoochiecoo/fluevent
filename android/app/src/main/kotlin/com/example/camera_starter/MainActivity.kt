@@ -32,6 +32,7 @@ import org.opencv.android.Utils
 import android.util.Log
 
 class MainActivity : FlutterActivity() {
+    @Volatile private var openCvReady: Boolean = false
 
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
@@ -46,6 +47,7 @@ class MainActivity : FlutterActivity() {
 
         // Initialize OpenCV (uses packaged native libs). Returns false if failed.
         val ok = OpenCVLoader.initDebug()
+        openCvReady = ok
         Log.d("OpenCV", "configureFlutterEngine.initDebug=$ok")
         logSink?.success("OpenCV init (configure): $ok")
 
@@ -109,8 +111,12 @@ class MainActivity : FlutterActivity() {
     private fun startCamera(flutterEngine: FlutterEngine): Long {
         // ensure OpenCV static init in case called before configure
         val ok = OpenCVLoader.initDebug()
+        openCvReady = ok
         Log.d("OpenCV", "startCamera.initDebug=$ok")
         logSink?.success("OpenCV init (camera): $ok")
+        if (!ok) {
+            runOnUiThread { logSink?.success("OpenCV not ready — skipping analyzer") }
+        }
 
         val textureEntry = flutterEngine.renderer.createSurfaceTexture()
         val surfaceTexture = textureEntry.surfaceTexture()
@@ -173,6 +179,11 @@ class MainActivity : FlutterActivity() {
                             }
                             gray.put(y, 0, rowTmp)
                         }
+                    }
+
+                    if (!openCvReady) {
+                        runOnUiThread { logSink?.success("Analyzer skipped: OpenCV not ready") }
+                        return@setAnalyzer
                     }
 
                     // Apply OpenCV processing
@@ -238,7 +249,10 @@ class MainActivity : FlutterActivity() {
         ) == PackageManager.PERMISSION_GRANTED
 
     private fun processImage(): String {
-        try { /* scope for early failures */ } catch (_: Throwable) {}
+        if (!openCvReady) {
+            logSink?.success("processImage skipped: OpenCV not ready")
+            throw IllegalStateException("OpenCV not initialized")
+        }
 
         // Ensure OpenCV initialized
         val ok = OpenCVLoader.initDebug()
