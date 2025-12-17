@@ -13,6 +13,8 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import java.util.concurrent.Executors
 import java.nio.ByteBuffer
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "com.example.camera/methods"
@@ -61,39 +63,28 @@ class MainActivity: FlutterActivity() {
                 request.provideSurface(surface, cameraExecutor) {}
             }
 
-            // --- АНАЛИЗАТОР ИЗОБРАЖЕНИЯ (БЕЗОПАСНЫЙ ДЕТЕКТОР) ---
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
             
             imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
                 try {
-                    // 1. Получаем Y-плоскость (яркость/чб)
                     val plane = image.planes[0]
                     val buffer = plane.buffer
                     val width = image.width
                     val height = image.height
-                    
-                    // 2. Сканируем только среднюю строку для производительности
-                    // Это безопасно и не нагружает CPU
                     val rowStride = plane.rowStride
                     val pixelStride = plane.pixelStride
                     val midY = height / 2
-                    
-                    // Позиция начала средней строки в буфере
                     val startOffset = midY * rowStride
-                    
+
+                    // ----- Детектор линии по средней строке -----
                     var currentRun = 0
                     var maxRun = 0
-                    
-                    // Проход по пикселям средней строки
                     if (buffer.capacity() > startOffset + width * pixelStride) {
-                        for (x in 0 until width step 2) { // step 2 для ускорения
+                        for (x in 0 until width step 2) {
                             val index = startOffset + (x * pixelStride)
-                            // Конвертируем byte в int (0..255)
                             val pixelVal = buffer.get(index).toInt() and 0xFF
-                            
-                            // Если пиксель яркий (> 150), считаем это частью линии
                             if (pixelVal > 150) {
                                 currentRun++
                             } else {
@@ -103,23 +94,45 @@ class MainActivity: FlutterActivity() {
                         }
                     }
                     if (currentRun > maxRun) maxRun = currentRun
-
-                    // 3. Отправляем результат во Flutter
-                    // Если линия длиннее 30% ширины, отправляем флаг detected = true
                     val threshold = (width / 2) * 0.3 
                     val detected = maxRun > threshold
-                    
+
+                    // ----- Подсветка точек с похожим цветом в радиусе -----
+                    val centerX = width / 2
+                    val centerY = height / 2
+                    val radius = 50
+                    val centerIndex = centerY * rowStride + centerX * pixelStride
+                    val centerPixel = buffer.get(centerIndex).toInt() and 0xFF
+
+                    var similarCount = 0
+                    for (y in (centerY - radius).coerceAtLeast(0)..(centerY + radius).coerceAtMost(height - 1)) {
+                        for (x in (centerX - radius).coerceAtLeast(0)..(centerX + radius).coerceAtMost(width - 1)) {
+                            val dx = x - centerX
+                            val dy = y - centerY
+                            if (dx*dx + dy*dy <= radius*radius) {
+                                val idx = y * rowStride + x * pixelStride
+                                val px = buffer.get(idx).toInt() and 0xFF
+                                if (abs(px - centerPixel) < 30) { // порог схожести
+                                    similarCount++
+                                }
+                            }
+                        }
+                    }
+
+                    // ----- Отправляем результат во Flutter -----
                     runOnUiThread { 
                         eventSink?.success(mapOf(
                             "detected" to detected,
                             "length" to maxRun,
-                            "width" to width
+                            "width" to width,
+                            "similarCount" to similarCount // новый показатель подсветки
                         )) 
                     }
+
                 } catch (e: Exception) {
-                    // Игнорируем ошибки кадра, чтобы не крашить приложение
+                    // Игнорируем ошибки кадра
                 } finally {
-                    image.close() // Обязательно закрываем!
+                    image.close()
                 }
             }
 
@@ -127,7 +140,6 @@ class MainActivity: FlutterActivity() {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer)
             } catch(e: Exception) {}
-
         }, ContextCompat.getMainExecutor(this))
 
         return textureId
