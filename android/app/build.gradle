@@ -18,12 +18,24 @@ android {
                 srcDirs += 'src/main/kotlin'
                 def opencvSrc = file('../../opencv/sdk/java/src')
                 if (opencvSrc.exists()) {
-                    println "Including OpenCV Java sources (excluding camera views) from: ${opencvSrc}"
+                    println "Including OpenCV core-only Java sources from: ${opencvSrc}"
                     srcDirs += opencvSrc.toString()
-                    exclude 'org/opencv/android/CameraGLSurfaceView.java'
-                    exclude 'org/opencv/android/CameraBridgeViewBase.java'
-                    exclude 'org/opencv/android/JavaCameraView.java'
-                    exclude 'org/opencv/android/NativeCameraView.java'
+                    // Only include minimal packages required for Mat/Imgproc/OpenCVLoader/Utils
+                    include 'org/opencv/core/**'
+                    include 'org/opencv/imgproc/**'
+                    include 'org/opencv/utils/**'
+                    include 'org/opencv/android/OpenCVLoader.java'
+                    include 'org/opencv/android/Utils.java'
+                    // Exclude everything else (not strictly necessary when includes used, but keep safe)
+                    exclude 'org/opencv/android/Camera**'
+                    exclude 'org/opencv/android/JavaCamera**'
+                    exclude 'org/opencv/android/NativeCamera**'
+                    exclude 'org/opencv/calib3d/**'
+                    exclude 'org/opencv/features2d/**'
+                    exclude 'org/opencv/objdetect/**'
+                    exclude 'org/opencv/video/**'
+                    exclude 'org/opencv/videoio/**'
+                    exclude 'org/opencv/photo/**'
                 }
             }
         }
