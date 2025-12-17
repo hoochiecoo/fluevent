@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -41,9 +42,9 @@ class _CameraScreenState extends State<CameraScreen> {
     _events.receiveBroadcastStream().listen((event) {
       if (!mounted || event is! Map) return;
 
-      final w = event['width'];
-      final h = event['height'];
-      final pts = event['points'];
+      final w = event['width'] ?? 1;
+      final h = event['height'] ?? 1;
+      final pts = event['points'] ?? [];
 
       final List<Offset> parsed = [];
 
@@ -60,67 +61,72 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _startCamera() async {
-    final id = await _method.invokeMethod('startCamera');
-    setState(() => _textureId = id);
+    try {
+      final id = await _method.invokeMethod('startCamera');
+      if (!mounted) return;
+      setState(() => _textureId = id);
+    } catch (e) {
+      debugPrint('Camera start error: $e');
+    }
   }
 
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: _textureId == null
-        ? const Center(child: CircularProgressIndicator())
-        : LayoutBuilder(
-            builder: (context, constraints) {
-              // соотношение камеры
-              final cameraAspect = _imgW / _imgH;
-              final screenAspect = constraints.maxWidth / constraints.maxHeight;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _textureId == null
+          ? const Center(child: CircularProgressIndicator())
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                // пропорции камеры и экрана
+                final cameraAspect = _imgW / _imgH;
+                final screenAspect = constraints.maxWidth / constraints.maxHeight;
 
-              double displayW = constraints.maxWidth;
-              double displayH = constraints.maxHeight;
-              double offsetX = 0;
-              double offsetY = 0;
+                double displayW = constraints.maxWidth;
+                double displayH = constraints.maxHeight;
+                double offsetX = 0;
+                double offsetY = 0;
 
-              if (screenAspect > cameraAspect) {
-                // экран шире, чем камера
-                displayH = constraints.maxHeight;
-                displayW = displayH * cameraAspect;
-                offsetX = (constraints.maxWidth - displayW) / 2;
-              } else {
-                // экран выше, чем камера
-                displayW = constraints.maxWidth;
-                displayH = displayW / cameraAspect;
-                offsetY = (constraints.maxHeight - displayH) / 2;
-              }
+                if (screenAspect > cameraAspect) {
+                  // экран шире
+                  displayH = constraints.maxHeight;
+                  displayW = displayH * cameraAspect;
+                  offsetX = (constraints.maxWidth - displayW) / 2;
+                } else {
+                  // экран выше
+                  displayW = constraints.maxWidth;
+                  displayH = displayW / cameraAspect;
+                  offsetY = (constraints.maxHeight - displayH) / 2;
+                }
 
-              return Stack(
-                children: [
-                  Positioned(
-                    left: offsetX,
-                    top: offsetY,
-                    width: displayW,
-                    height: displayH,
-                    child: Texture(textureId: _textureId!),
-                  ),
-                  Positioned(
-                    left: offsetX,
-                    top: offsetY,
-                    width: displayW,
-                    height: displayH,
-                    child: CustomPaint(
-                      painter: PixelPainter(
-                        points: _points,
-                        imageW: _imgW,
-                        imageH: _imgH,
+                return Stack(
+                  children: [
+                    Positioned(
+                      left: offsetX,
+                      top: offsetY,
+                      width: displayW,
+                      height: displayH,
+                      child: Texture(textureId: _textureId!),
+                    ),
+                    Positioned(
+                      left: offsetX,
+                      top: offsetY,
+                      width: displayW,
+                      height: displayH,
+                      child: CustomPaint(
+                        painter: PixelPainter(
+                          points: _points,
+                          imageW: _imgW,
+                          imageH: _imgH,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
-          ),
-  );
+                  ],
+                );
+              },
+            ),
+    );
+  }
 }
-
 
 class PixelPainter extends CustomPainter {
   final List<Offset> points;
@@ -137,13 +143,13 @@ class PixelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (imageW == 0 || imageH == 0) return;
 
-    // Камера почти всегда отдаёт landscape, экран — portrait
+    // проверяем, нужно ли повернуть
     final bool rotated = imageW > imageH;
 
     final double srcW = rotated ? imageH.toDouble() : imageW.toDouble();
     final double srcH = rotated ? imageW.toDouble() : imageH.toDouble();
 
-    // === BoxFit.cover ===
+    // BoxFit.cover
     final double scale =
         (size.width / srcW).compareTo(size.height / srcH) > 0
             ? size.width / srcW
@@ -156,25 +162,23 @@ class PixelPainter extends CustomPainter {
     final double offsetY = (size.height - drawnH) / 2;
 
     final paint = Paint()
-      ..color = Colors.yellowAccent
+      ..color = Colors.yellowAccent.withOpacity(0.7)
       ..style = PaintingStyle.fill;
 
     for (final p in points) {
       double x = p.dx;
       double y = p.dy;
 
-      // 🔄 поворот на 90°
-    if (rotated) {
-      final tmp = x;
-      x = imageH - y;
-      y = tmp;
-    }
-
+      // поворот 90° CW для Texture
+      if (rotated) {
+        final tmp = x;
+        x = imageH - y;
+        y = tmp;
+      }
 
       final double px = x * scale + offsetX;
       final double py = y * scale + offsetY;
 
-      // не рисуем за экраном
       if (px < 0 || py < 0 || px > size.width || py > size.height) continue;
 
       canvas.drawCircle(
@@ -186,5 +190,5 @@ class PixelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant PixelPainter oldDelegate) => true;
 }
