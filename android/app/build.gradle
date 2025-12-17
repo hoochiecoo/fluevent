@@ -13,11 +13,19 @@ android {
     }
     kotlinOptions { jvmTarget = '1.8' }
     sourceSets {
-        main.java.srcDirs += 'src/main/kotlin'
-        def opencvSrc = file('../../opencv/sdk/java/src')
-        if (opencvSrc.exists()) {
-            println "Including OpenCV Java sources from: ${opencvSrc}"
-            main.java.srcDirs += opencvSrc.toString()
+        main {
+            java {
+                srcDirs += 'src/main/kotlin'
+                def opencvSrc = file('../../opencv/sdk/java/src')
+                if (opencvSrc.exists()) {
+                    println "Including OpenCV Java sources (excluding camera views) from: ${opencvSrc}"
+                    srcDirs += opencvSrc.toString()
+                    exclude 'org/opencv/android/CameraGLSurfaceView.java'
+                    exclude 'org/opencv/android/CameraBridgeViewBase.java'
+                    exclude 'org/opencv/android/JavaCameraView.java'
+                    exclude 'org/opencv/android/NativeCameraView.java'
+                }
+            }
         }
     }
     defaultConfig {
