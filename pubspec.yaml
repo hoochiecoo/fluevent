@@ -1,5 +1,5 @@
-name: camera_starter
-description: Final Fixed Project.
+name: lane_detection_app
+description: A new Flutter project for lane detection.
 publish_to: 'none'
 version: 1.0.0+1
 environment:
@@ -11,6 +11,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^3.0.0
 flutter:
   uses-material-design: true
