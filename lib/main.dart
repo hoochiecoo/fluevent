@@ -29,6 +29,7 @@ class _CameraScreenState extends State<CameraScreen> {
   int? _textureId;
   bool _lineDetected = false;
   int _lineLength = 0;
+  int _similarCount = 0; // новый показатель
   String _status = "Initializing...";
 
   @override
@@ -42,10 +43,12 @@ class _CameraScreenState extends State<CameraScreen> {
       if (event is Map) {
         final bool detected = event['detected'] ?? false;
         final int length = event['length'] ?? 0;
+        final int similar = event['similarCount'] ?? 0; // новый показатель
         
         setState(() {
           _lineDetected = detected;
           _lineLength = length;
+          _similarCount = similar;
           _status = detected ? "Line Detected!" : "Scanning...";
         });
       }
@@ -110,11 +113,18 @@ class _CameraScreenState extends State<CameraScreen> {
                     _status,
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
-                  if (_lineDetected)
+                  if (_lineDetected) ...[
+                    const SizedBox(height: 4),
                     Text(
                       "Length: $_lineLength px",
                       style: const TextStyle(color: Colors.white70),
-                    )
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Similar Pixels: $_similarCount",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
                 ],
               ),
             ),
