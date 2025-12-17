@@ -12,7 +12,14 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     kotlinOptions { jvmTarget = '1.8' }
-    sourceSets { main.java.srcDirs += 'src/main/kotlin' }
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+        def opencvSrc = file('../../opencv/sdk/java/src')
+        if (opencvSrc.exists()) {
+            println "Including OpenCV Java sources from: ${opencvSrc}"
+            main.java.srcDirs += opencvSrc.toString()
+        }
+    }
     defaultConfig {
         applicationId "com.example.camera_starter"
         minSdkVersion 24
