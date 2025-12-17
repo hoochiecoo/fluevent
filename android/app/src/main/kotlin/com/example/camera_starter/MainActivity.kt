@@ -14,6 +14,15 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
+// OpenCV imports
+import org.opencv.android.OpenCVLoader
+import org.opencv.core.CvType
+import org.opencv.core.Mat
+import org.opencv.core.MatOfPoint
+import org.opencv.core.Point
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
+
 class MainActivity : FlutterActivity() {
 
     private val METHOD_CHANNEL = "com.example.camera/methods"
@@ -24,6 +33,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Initialize OpenCV (uses packaged native libs). Returns false if failed.
+        OpenCVLoader.initDebug()
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -82,37 +94,65 @@ class MainActivity : FlutterActivity() {
 
             analyzer.setAnalyzer(cameraExecutor) { image ->
                 try {
-                    val plane = image.planes[0]
-                    val buffer = plane.buffer
+                    val yPlane = image.planes[0]
+                    val yBuffer = yPlane.buffer
 
                     val width = image.width
                     val height = image.height
-                    val rowStride = plane.rowStride
-                    val pixelStride = plane.pixelStride
+                    val rowStride = yPlane.rowStride
+                    val pixelStride = yPlane.pixelStride
 
-                    val cx = width / 2
-                    val cy = height / 2
-                    val radius = 50
-                    val threshold = 30
+                    // Build grayscale Mat from Y plane accounting for row/pixel stride
+                    val gray = Mat(height, width, CvType.CV_8UC1)
 
-                    val centerIndex = cy * rowStride + cx * pixelStride
-                    val centerValue = buffer.get(centerIndex).toInt() and 0xFF
-
-                    val points = mutableListOf<List<Int>>()
-
-                    for (y in (cy - radius).coerceAtLeast(0)..(cy + radius).coerceAtMost(height - 1)) {
-                        for (x in (cx - radius).coerceAtLeast(0)..(cx + radius).coerceAtMost(width - 1)) {
-
-                            val dx = x - cx
-                            val dy = y - cy
-                            if (dx * dx + dy * dy > radius * radius) continue
-
-                            val idx = y * rowStride + x * pixelStride
-                            val v = buffer.get(idx).toInt() and 0xFF
-
-                            if (abs(v - centerValue) < threshold) {
-                                points.add(listOf(x, y))
+                    // Copy Y plane into gray Mat
+                    if (pixelStride == 1 && rowStride == width) {
+                        // Fast path: contiguous
+                        val data = ByteArray(width * height)
+                        yBuffer.get(data)
+                        gray.put(0, 0, data)
+                    } else {
+                        // General path: handle strides
+                        val all = ByteArray(yBuffer.remaining())
+                        yBuffer.get(all)
+                        val rowTmp = ByteArray(width)
+                        for (y in 0 until height) {
+                            if (pixelStride == 1) {
+                                val srcPos = y * rowStride
+                                System.arraycopy(all, srcPos, rowTmp, 0, width)
+                            } else {
+                                var srcPos = y * rowStride
+                                var i = 0
+                                while (i < width) {
+                                    rowTmp[i] = all[srcPos]
+                                    srcPos += pixelStride
+                                    i++
+                                }
                             }
+                            gray.put(y, 0, rowTmp)
+                        }
+                    }
+
+                    // Apply OpenCV processing
+                    val blurred = Mat()
+                    Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
+
+                    val edges = Mat()
+                    Imgproc.Canny(blurred, edges, 80.0, 150.0)
+
+                    // Extract non-zero (edge) points, downsample to a reasonable amount
+                    val pointsList = mutableListOf<List<Int>>()
+                    val stepY = (height / 200).coerceAtLeast(1) // adapt density
+                    val stepX = (width / 200).coerceAtLeast(1)
+                    val row = ByteArray(width)
+                    for (y in 0 until height step stepY) {
+                        edges.get(y, 0, row)
+                        var x = 0
+                        while (x < width) {
+                            if (row[x].toInt() != 0) {
+                                pointsList.add(listOf(x, y))
+                            }
+                            x += stepX
                         }
                     }
 
@@ -121,10 +161,13 @@ class MainActivity : FlutterActivity() {
                             mapOf(
                                 "width" to width,
                                 "height" to height,
-                                "points" to points
+                                "points" to pointsList
                             )
                         )
                     }
+
+                    // Release Mats
+                    gray.release(); blurred.release(); edges.release()
 
                 } catch (_: Exception) {
                 } finally {
