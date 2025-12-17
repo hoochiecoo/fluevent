@@ -13,7 +13,7 @@ jobs:
 
     # НОВЫЙ ШАГ: Кэширование зависимостей Pub
     # Этот шаг должен идти ПЕРЕД установкой Flutter и запуском `pub get`
-    - name: Cache Flutter pub dependencies
+    - name: Cache Flutter pub dependencies1
       uses: actions/cache@v4
       with:
         # Путь к папке, где Flutter хранит скачанные пакеты.
