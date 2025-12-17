@@ -15,6 +15,7 @@ import java.util.concurrent.Executors
 import java.nio.ByteBuffer
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.math.abs
 
 class MainActivity: FlutterActivity() {
     private val METHOD_CHANNEL = "com.example.camera/methods"
