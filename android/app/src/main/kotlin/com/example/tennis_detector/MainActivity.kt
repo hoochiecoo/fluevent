@@ -294,7 +294,7 @@ class MainActivity: FlutterActivity() {
                 val y = output[0][1][i]
                 val w = output[0][2][i]
                 val h = output[0][3][i]
-                boxes.add(listOf(x, y, w, h))
+                boxes.add(listOf(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble()))
             }
         }
         return boxes
