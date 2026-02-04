@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -147,6 +146,32 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
                 Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
                 const SizedBox(height: 8),
+                const Text("DETECTED BOXES:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                if (_boxes.isEmpty)
+                  const Text("No boxes detected", style: TextStyle(fontSize: 12, color: Colors.grey))
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _boxes.length,
+                      itemBuilder: (context, idx) {
+                        final box = _boxes[idx];
+                        final x = (box['x'] as num?)?.toDouble() ?? 0;
+                        final y = (box['y'] as num?)?.toDouble() ?? 0;
+                        final w = (box['w'] as num?)?.toDouble() ?? 0;
+                        final h = (box['h'] as num?)?.toDouble() ?? 0;
+                        final conf = (box['conf'] as num?)?.toDouble() ?? 0;
+                        return Text(
+                          '#${idx + 1}: conf=${(conf * 100).toStringAsFixed(1)}% x=${(x * 100).toStringAsFixed(0)}% y=${(y * 100).toStringAsFixed(0)}% w=${(w * 100).toStringAsFixed(0)}% h=${(h * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(fontSize: 10, color: Colors.cyan),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
+                    ),
+                  ),
+                Text(_tfliteOutput, style: const TextStyle(fontSize: 12, color: Colors.lightBlueAccent)),
+
               ],
             ),
           )
