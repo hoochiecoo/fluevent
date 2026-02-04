@@ -13,11 +13,6 @@ import io.flutter.plugin.common.EventChannel
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.label.ImageLabeling
-import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
-import com.google.mlkit.vision.objects.ObjectDetection
-import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import org.tensorflow.lite.Interpreter
 
 import java.util.concurrent.Executors
@@ -70,16 +65,6 @@ class MainActivity: FlutterActivity() {
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
-
-    private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
-
-    private val objectOptions = ObjectDetectorOptions.Builder()
-        .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
-        .enableClassification()
-        .build()
-    private val objectDetector = ObjectDetection.getClient(objectOptions)
-
-    private var lastUpdate = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -156,7 +141,6 @@ class MainActivity: FlutterActivity() {
     private fun processImageProxy(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
-            // --- TFLite инференс на реальном кадре ---
             try {
                 val assetManager = this.assets
                 val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
@@ -177,59 +161,16 @@ class MainActivity: FlutterActivity() {
                 runOnUiThread {
                     val boxes = extractBoxesFromOutput(output)
                     val map = HashMap<String, Any>()
-                    map["objects"] = "TFLite objects: $objectCount"
+                    map["scene"] = "Detected: $objectCount objects"
+                    map["objects"] = "TFLite: Active"
                     map["boxes"] = boxes
                     eventSink?.success(map)
                 }
-            } catch (_: Exception) {}
-            // --- MLKit (старый код) ---
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            
-            objectDetector.process(image)
-                .addOnSuccessListener { objects ->
-                    val roundObjects = ArrayList<String>()
-                    
-                    for (obj in objects) {
-                        val bounds = obj.boundingBox
-                        val ratio = bounds.width().toFloat() / bounds.height().toFloat()
-                        val isGeometricCircle = ratio > 0.8 && ratio < 1.2
-
-                        var labelText = "Unknown"
-                        if (obj.labels.isNotEmpty()) {
-                            labelText = obj.labels[0].text
-                        }
-
-                        if (isGeometricCircle || labelText.contains("Ball", true)) {
-                            roundObjects.add("$labelText (Ratio: ${String.format("%.2f", ratio)})")
-                        }
-                    }
-
-                    labeler.process(image)
-                        .addOnSuccessListener { labels ->
-                            val relevantScenes = labels
-                                .filter { it.confidence > 0.6 }
-                                .map { it.text }
-                                .take(3)
-                                .joinToString(", ")
-
-                            val objStr = if(roundObjects.isEmpty()) "None" else roundObjects.joinToString(", ")
-
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastUpdate > 200) {
-                                lastUpdate = currentTime
-                                runOnUiThread {
-                                    val map = HashMap<String, String>()
-                                    map["scene"] = relevantScenes
-                                    map["objects"] = objStr
-                                    eventSink?.success(map)
-                                }
-                            }
-                        }
-                        .addOnCompleteListener { imageProxy.close() }
-                }
-                .addOnFailureListener { 
-                    imageProxy.close() 
-                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                imageProxy.close()
+            }
         } else {
             imageProxy.close()
         }
