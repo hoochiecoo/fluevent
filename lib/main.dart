@@ -26,7 +26,7 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  bool? _tfliteAvailable;
+  Map? _tfliteStatus;
 
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
@@ -60,10 +60,10 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<void> _checkTFLite() async {
     try {
-      final available = await _methodChannel.invokeMethod('isTFLiteAvailable');
-      setState(() => _tfliteAvailable = available == true);
+      final status = await _methodChannel.invokeMethod('isTFLiteAvailable');
+      setState(() => _tfliteStatus = Map.from(status));
     } catch (e) {
-      setState(() => _tfliteAvailable = false);
+      setState(() => _tfliteStatus = null);
     }
   }
 
@@ -117,13 +117,19 @@ class _CameraScreenState extends State<CameraScreen> {
                     const Text("POSSIBLE ROUND OBJECTS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
                     const SizedBox(width: 8),
                     Text(
-                      _tfliteAvailable == null
+                      _tfliteStatus == null
                         ? "(TFLite: ...)"
-                        : _tfliteAvailable == true
-                          ? "(TFLite: OK)"
-                          : "(TFLite: Not found)",
+                        : (_tfliteStatus!["tflite"] == true
+                            ? (_tfliteStatus!["model"] == true
+                                ? "(TFLite: OK, Model: OK)"
+                                : "(TFLite: OK, Model: Not found)")
+                            : "(TFLite: Not found)"),
                       style: TextStyle(
-                        color: _tfliteAvailable == true ? Colors.green : Colors.red,
+                        color: _tfliteStatus == null
+                            ? Colors.grey
+                            : (_tfliteStatus!["tflite"] == true
+                                ? (_tfliteStatus!["model"] == true ? Colors.green : Colors.orange)
+                                : Colors.red),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
