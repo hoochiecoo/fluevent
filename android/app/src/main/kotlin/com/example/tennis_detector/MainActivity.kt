@@ -156,6 +156,31 @@ class MainActivity: FlutterActivity() {
     private fun processImageProxy(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
+            // --- TFLite инференс на реальном кадре ---
+            try {
+                val assetManager = this.assets
+                val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
+                val fileInputStream = fileDescriptor.createInputStream()
+                val fileChannel = fileInputStream.channel
+                val startOffset = fileDescriptor.startOffset
+                val declaredLength = fileDescriptor.length
+                val modelBuffer = fileChannel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+                fileInputStream.close()
+                fileDescriptor.close()
+                val interpreter = Interpreter(modelBuffer)
+                // Преобразуем кадр в 640x640 float32
+                val bitmap = imageProxy.toBitmap(640, 640)
+                val input = bitmapToInputArray(bitmap)
+                val output = Array(1) { Array(84) { FloatArray(8400) } }
+                interpreter.run(input, output)
+                val objectCount = countObjectsFromOutput(output)
+                runOnUiThread {
+                    val map = HashMap<String, String>()
+                    map["objects"] = "TFLite objects: $objectCount"
+                    eventSink?.success(map)
+                }
+            } catch (_: Exception) {}
+            // --- MLKit (старый код) ---
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             
             objectDetector.process(image)
@@ -213,5 +238,49 @@ class MainActivity: FlutterActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+    }
+
+    // Преобразование imageProxy в Bitmap нужного размера
+    private fun ImageProxy.toBitmap(width: Int, height: Int): android.graphics.Bitmap {
+        val yBuffer = planes[0].buffer
+        val uBuffer = planes[1].buffer
+        val vBuffer = planes[2].buffer
+        val ySize = yBuffer.remaining()
+        val uSize = uBuffer.remaining()
+        val vSize = vBuffer.remaining()
+        val nv21 = ByteArray(ySize + uSize + vSize)
+        yBuffer.get(nv21, 0, ySize)
+        vBuffer.get(nv21, ySize, vSize)
+        uBuffer.get(nv21, ySize + vSize, uSize)
+        val yuvImage = android.graphics.YuvImage(nv21, android.graphics.ImageFormat.NV21, this.width, this.height, null)
+        val out = java.io.ByteArrayOutputStream()
+        yuvImage.compressToJpeg(android.graphics.Rect(0, 0, this.width, this.height), 100, out)
+        val imageBytes = out.toByteArray()
+        val bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        return android.graphics.Bitmap.createScaledBitmap(bitmap, width, height, true)
+    }
+
+    // Преобразование Bitmap в float32 input для модели
+    private fun bitmapToInputArray(bitmap: android.graphics.Bitmap): Array<Array<Array<FloatArray>>> {
+        val input = Array(1) { Array(640) { Array(640) { FloatArray(3) } } }
+        for (y in 0 until 640) {
+            for (x in 0 until 640) {
+                val pixel = bitmap.getPixel(x, y)
+                input[0][y][x][0] = ((pixel shr 16) and 0xFF) / 255.0f
+                input[0][y][x][1] = ((pixel shr 8) and 0xFF) / 255.0f
+                input[0][y][x][2] = (pixel and 0xFF) / 255.0f
+            }
+        }
+        return input
+    }
+
+    // Подсчёт объектов по выходу модели (очень грубо: confidence > 0.3)
+    private fun countObjectsFromOutput(output: Array<Array<FloatArray>>): Int {
+        var count = 0
+        for (i in 0 until 8400) {
+            val conf = output[0][4][i]
+            if (conf > 0.3f) count++
+        }
+        return count
     }
 }
