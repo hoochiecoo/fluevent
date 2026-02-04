@@ -32,6 +32,17 @@ class MainActivity: FlutterActivity() {
         }
     }
 
+    private fun isModelLoadable(): Boolean {
+        return try {
+            val assetManager = this.assets
+            val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
+            fileDescriptor.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -62,7 +73,9 @@ class MainActivity: FlutterActivity() {
                     }
                 }
                 "isTFLiteAvailable" -> {
-                    result.success(isTFLiteAvailable())
+                    val tfliteOk = isTFLiteAvailable()
+                    val modelOk = isModelLoadable()
+                    result.success(mapOf("tflite" to tfliteOk, "model" to modelOk))
                 }
                 else -> {
                     result.notImplemented()
