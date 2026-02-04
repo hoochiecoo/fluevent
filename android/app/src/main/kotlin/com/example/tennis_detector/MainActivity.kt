@@ -283,4 +283,21 @@ class MainActivity: FlutterActivity() {
         }
         return count
     }
+
+    // Извлечение боксов из выхода модели (YOLOv8: x, y, w, h)
+    private fun extractBoxesFromOutput(output: Array<Array<FloatArray>>): List<List<Double>> {
+        val boxes = mutableListOf<List<Double>>()
+        for (i in 0 until 8400) {
+            val conf = output[0][4][i]
+            if (conf > 0.3f) {
+                val x = output[0][0][i]
+                val y = output[0][1][i]
+                val w = output[0][2][i]
+                val h = output[0][3][i]
+                boxes.add(listOf(x, y, w, h))
+            }
+        }
+        return boxes
+    }
 }
+
