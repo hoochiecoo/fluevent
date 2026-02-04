@@ -26,6 +26,8 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
+  bool? _tfliteAvailable;
+
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
   static const EventChannel _eventChannel = EventChannel('com.example.camera/events');
   int? _textureId;
@@ -37,6 +39,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
+    _checkTFLite();
     _startCamera();
     _eventChannel.receiveBroadcastStream().listen((event) {
       if(mounted) {
@@ -53,6 +56,15 @@ class _CameraScreenState extends State<CameraScreen> {
         });
       }
     });
+  }
+
+  Future<void> _checkTFLite() async {
+    try {
+      final available = await _methodChannel.invokeMethod('isTFLiteAvailable');
+      setState(() => _tfliteAvailable = available == true);
+    } catch (e) {
+      setState(() => _tfliteAvailable = false);
+    }
   }
 
   Future<void> _startCamera() async {
@@ -100,8 +112,26 @@ class _CameraScreenState extends State<CameraScreen> {
                 const Text("SCENE ANALYSIS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
                 Text(_sceneData, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
-                const Text("POSSIBLE ROUND OBJECTS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                Row(
+                  children: [
+                    const Text("POSSIBLE ROUND OBJECTS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _tfliteAvailable == null
+                        ? "(TFLite: ...)"
+                        : _tfliteAvailable == true
+                          ? "(TFLite: OK)"
+                          : "(TFLite: Not found)",
+                      style: TextStyle(
+                        color: _tfliteAvailable == true ? Colors.green : Colors.red,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
                 Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
+
               ],
             ),
           )
