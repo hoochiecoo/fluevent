@@ -18,10 +18,20 @@ import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import org.tensorflow.lite.Interpreter
 
 import java.util.concurrent.Executors
 
 class MainActivity: FlutterActivity() {
+    private fun isTFLiteAvailable(): Boolean {
+        return try {
+            Class.forName("org.tensorflow.lite.Interpreter")
+            true
+        } catch (e: ClassNotFoundException) {
+            false
+        }
+    }
+
     private val METHOD_CHANNEL = "com.example.camera/methods"
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
@@ -42,6 +52,10 @@ class MainActivity: FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "startCamera") {
+                // Optionally handle TFLite check here if needed
+            } else if (call.method == "isTFLiteAvailable") {
+                result.success(isTFLiteAvailable())
+            }
                 if (checkPermissions()) {
                     val tid = startCamera(flutterEngine)
                     result.success(tid)
