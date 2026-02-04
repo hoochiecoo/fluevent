@@ -38,8 +38,8 @@ class MainActivity: FlutterActivity() {
             val interpreter = Interpreter(modelBuffer)
             // Dummy input: [1, 640, 640, 3] float32 (или float16, если требуется)
             val input = Array(1) { Array(640) { Array(640) { FloatArray(3) } } }
-            // Dummy output: YOLOv8 обычно [1, N, 85] или подобное
-            val output = Array(1) { Array(8400) { FloatArray(84) } }
+            // Dummy output: YOLOv8 обычно [1, 84, 8400]
+            val output = Array(1) { Array(84) { FloatArray(8400) } }
             interpreter.run(input, output)
             "Output shape: [${output.size}, ${output[0].size}, ${output[0][0].size}]"
         } catch (e: Exception) {
