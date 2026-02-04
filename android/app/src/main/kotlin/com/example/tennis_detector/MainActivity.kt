@@ -28,16 +28,18 @@ class MainActivity: FlutterActivity() {
         return try {
             val assetManager = this.assets
             val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
-            val inputStream = fileDescriptor.createInputStream()
-            val model = ByteArray(fileDescriptor.length.toInt())
-            inputStream.read(model)
-            inputStream.close()
+            val fileInputStream = fileDescriptor.createInputStream()
+            val fileChannel = fileInputStream.channel
+            val startOffset = fileDescriptor.startOffset
+            val declaredLength = fileDescriptor.length
+            val modelBuffer = fileChannel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+            fileInputStream.close()
             fileDescriptor.close()
-            val interpreter = Interpreter(model)
+            val interpreter = Interpreter(modelBuffer)
             // Dummy input: [1, 640, 640, 3] float32 (или float16, если требуется)
             val input = Array(1) { Array(640) { Array(640) { FloatArray(3) } } }
             // Dummy output: YOLOv8 обычно [1, N, 85] или подобное
-            val output = Array(1) { Array(84) { FloatArray(8400) } }
+            val output = Array(1) { Array(8400) { FloatArray(84) } }
             interpreter.run(input, output)
             "Output shape: [${output.size}, ${output[0].size}, ${output[0][0].size}]"
         } catch (e: Exception) {
