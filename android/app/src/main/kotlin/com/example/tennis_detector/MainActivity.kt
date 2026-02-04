@@ -51,20 +51,22 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "startCamera") {
-                // Optionally handle TFLite check here if needed
-            } else if (call.method == "isTFLiteAvailable") {
-                result.success(isTFLiteAvailable())
-            }
-                if (checkPermissions()) {
-                    val tid = startCamera(flutterEngine)
-                    result.success(tid)
-                } else {
-                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
-                    result.error("PERM", "Permissions needed", null)
+            when (call.method) {
+                "startCamera" -> {
+                    if (checkPermissions()) {
+                        val tid = startCamera(flutterEngine)
+                        result.success(tid)
+                    } else {
+                        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
+                        result.error("PERM", "Permissions needed", null)
+                    }
                 }
-            } else {
-                result.notImplemented()
+                "isTFLiteAvailable" -> {
+                    result.success(isTFLiteAvailable())
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
 
