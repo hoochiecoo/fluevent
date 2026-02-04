@@ -35,6 +35,7 @@ class _CameraScreenState extends State<CameraScreen> {
   String _sceneData = "Scanning...";
   String _objectData = "No objects";
   String _tfliteOutput = "";
+  List<List<double>> _boxes = [];
   bool _isCourt = false;
 
   @override
@@ -49,12 +50,7 @@ class _CameraScreenState extends State<CameraScreen> {
         setState(() {
           _sceneData = data['scene'] ?? "";
           _objectData = data['objects'] ?? "";
-          
-          String lowerScene = _sceneData.toLowerCase();
-          _isCourt = lowerScene.contains("court") || 
-                     lowerScene.contains("tennis") || 
-                     lowerScene.contains("stadium") ||
-                     lowerScene.contains("grass");
+          _boxes = (data['boxes'] as List<dynamic>?)?.map((b) => List<double>.from(b)).toList() ?? [];
         });
       }
     });
