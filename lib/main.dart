@@ -34,6 +34,7 @@ class _CameraScreenState extends State<CameraScreen> {
   
   String _sceneData = "Scanning...";
   String _objectData = "No objects";
+  String _tfliteOutput = "";
   bool _isCourt = false;
 
   @override
@@ -41,6 +42,7 @@ class _CameraScreenState extends State<CameraScreen> {
     super.initState();
     _checkTFLite();
     _startCamera();
+    _runTFLiteModel();
     _eventChannel.receiveBroadcastStream().listen((event) {
       if(mounted) {
         final Map data = event as Map;
@@ -56,6 +58,15 @@ class _CameraScreenState extends State<CameraScreen> {
         });
       }
     });
+  }
+
+  Future<void> _runTFLiteModel() async {
+    try {
+      final output = await _methodChannel.invokeMethod('runTFLiteModel');
+      setState(() => _tfliteOutput = output.toString());
+    } catch (e) {
+      setState(() => _tfliteOutput = 'Error: $e');
+    }
   }
 
   Future<void> _checkTFLite() async {
@@ -137,6 +148,8 @@ class _CameraScreenState extends State<CameraScreen> {
                   ],
                 ),
                 Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
+                const SizedBox(height: 8),
+                Text(_tfliteOutput, style: const TextStyle(fontSize: 12, color: Colors.lightBlueAccent)),
 
               ],
             ),
