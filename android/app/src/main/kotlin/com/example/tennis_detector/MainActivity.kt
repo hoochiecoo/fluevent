@@ -175,8 +175,10 @@ class MainActivity: FlutterActivity() {
                 interpreter.run(input, output)
                 val objectCount = countObjectsFromOutput(output)
                 runOnUiThread {
-                    val map = HashMap<String, String>()
+                    val boxes = extractBoxesFromOutput(output)
+                    val map = HashMap<String, Any>()
                     map["objects"] = "TFLite objects: $objectCount"
+                    map["boxes"] = boxes
                     eventSink?.success(map)
                 }
             } catch (_: Exception) {}
