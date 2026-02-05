@@ -164,6 +164,7 @@ class MainActivity: FlutterActivity() {
                     map["scene"] = "Detected: $objectCount objects"
                     map["objects"] = "TFLite: Active"
                     map["boxes"] = boxes
+                    map["raw_output"] = output.map { it.map { it.toList() } }
                     eventSink?.success(map)
                 }
             } catch (e: Exception) {
