@@ -252,16 +252,6 @@ class MainActivity: FlutterActivity() {
         return input
     }
 
-    // Подсчёт объектов по выходу модели (очень грубо: confidence > 0.3)
-    private fun countObjectsFromOutput(output: Array<Array<FloatArray>>): Int {
-        var count = 0
-        for (i in 0 until 8400) {
-            val conf = output[0][4][i]
-            if (conf > 0.3f) count++
-        }
-        return count
-    }
-
     // Подсчёт объектов по выходу модели (confidence > 0.3)
     private fun countObjectsFromOutput(output: Array<Array<FloatArray>>): Int {
         var count = 0
