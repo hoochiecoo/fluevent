@@ -153,15 +153,16 @@ class MainActivity: FlutterActivity() {
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-            
-            imageAnalyzer.setAnalyzer(cameraExecutor) { imageProxy ->
-                processImageProxy(imageProxy)
-            }
 
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer)
                 addDebugLog("✓ Camera bound successfully")
+                
+                imageAnalyzer.setAnalyzer(cameraExecutor) { imageProxy ->
+                    processImageProxy(imageProxy)
+                }
+                addDebugLog("✓ Analyzer attached")
             } catch(e: Exception) {
                 addDebugLog("✗ Camera bind failed: ${e.javaClass.simpleName}")
                 sendError("Camera: ${e.message}")
@@ -176,16 +177,16 @@ class MainActivity: FlutterActivity() {
     private fun processImageProxy(imageProxy: ImageProxy) {
         try {
             frameCount++
-            val startTime = System.currentTimeMillis()
+            addDebugLog("▶ Frame $frameCount received")
             
             val mediaImage = imageProxy.image
             if (mediaImage == null) {
-                addDebugLog("⚠ Frame $frameCount: null image")
+                addDebugLog("✗ Frame $frameCount: null image")
                 return
             }
             
             if (tfliteInterpreter == null) {
-                addDebugLog("⚠ Interpreter not ready")
+                addDebugLog("✗ Frame $frameCount: Interpreter not ready")
                 return
             }
             
@@ -193,13 +194,14 @@ class MainActivity: FlutterActivity() {
             val input = bitmapToInputArray(bitmap)
             val output = Array(1) { Array(84) { FloatArray(8400) } }
             
+            val inferenceStart = System.currentTimeMillis()
             tfliteInterpreter!!.run(input, output)
+            inferenceTime = System.currentTimeMillis() - inferenceStart
             
             val detections = parseDetections(output)
-            inferenceTime = System.currentTimeMillis() - startTime
             val currentTime = System.currentTimeMillis()
             
-            if (currentTime - lastUpdate > 200) {
+            if (currentTime - lastUpdate > 100) {
                 lastUpdate = currentTime
                 sendDebugInfo(detections)
             }
@@ -244,9 +246,10 @@ class MainActivity: FlutterActivity() {
         for (y in 0 until 640) {
             for (x in 0 until 640) {
                 val pixel = bitmap.getPixel(x, y)
-                input[0][y][x][0] = ((pixel shr 16) and 0xFF) / 255.0f
-                input[0][y][x][1] = ((pixel shr 8) and 0xFF) / 255.0f
-                input[0][y][x][2] = (pixel and 0xFF) / 255.0f
+                // RGB: R at [16..23], G at [8..15], B at [0..7]
+                input[0][y][x][0] = ((pixel shr 16) and 0xFF).toFloat() / 255.0f
+                input[0][y][x][1] = ((pixel shr 8) and 0xFF).toFloat() / 255.0f
+                input[0][y][x][2] = (pixel and 0xFF).toFloat() / 255.0f
             }
         }
         return input
@@ -258,6 +261,9 @@ class MainActivity: FlutterActivity() {
         for (i in 0 until 8400) {
             val conf = output[0][4][i]
             if (conf > 0.3f) count++
+        }
+        if (count == 0) {
+            addDebugLog("⚠ No detections (max conf: ${output[0][4].maxOrNull() ?: 0f})")
         }
         return count
     }
@@ -281,7 +287,7 @@ class MainActivity: FlutterActivity() {
         
         for (i in 0 until 8400) {
             val conf = output[0][4][i]
-            if (conf > 0.3f) {
+            if (conf > 0.1f) {
                 val x = output[0][0][i]
                 val y = output[0][1][i]
                 val w = output[0][2][i]
