@@ -13,6 +13,11 @@ import io.flutter.plugin.common.EventChannel
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import org.tensorflow.lite.Interpreter
 
 import java.util.concurrent.Executors
@@ -65,6 +70,16 @@ class MainActivity: FlutterActivity() {
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
+
+    private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+
+    private val objectOptions = ObjectDetectorOptions.Builder()
+        .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
+        .enableClassification()
+        .build()
+    private val objectDetector = ObjectDetection.getClient(objectOptions)
+
+    private var lastUpdate = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -141,6 +156,7 @@ class MainActivity: FlutterActivity() {
     private fun processImageProxy(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
+            // --- TFLite инференс на реальном кадре ---
             try {
                 val assetManager = this.assets
                 val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
@@ -161,17 +177,59 @@ class MainActivity: FlutterActivity() {
                 runOnUiThread {
                     val boxes = extractBoxesFromOutput(output)
                     val map = HashMap<String, Any>()
-                    map["scene"] = "Detected: $objectCount objects"
-                    map["objects"] = "TFLite: Active"
+                    map["objects"] = "TFLite objects: $objectCount"
                     map["boxes"] = boxes
-                    map["raw_output"] = output.map { it.map { it.toList() } }
                     eventSink?.success(map)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                imageProxy.close()
-            }
+            } catch (_: Exception) {}
+            // --- MLKit (старый код) ---
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            
+            objectDetector.process(image)
+                .addOnSuccessListener { objects ->
+                    val roundObjects = ArrayList<String>()
+                    
+                    for (obj in objects) {
+                        val bounds = obj.boundingBox
+                        val ratio = bounds.width().toFloat() / bounds.height().toFloat()
+                        val isGeometricCircle = ratio > 0.8 && ratio < 1.2
+
+                        var labelText = "Unknown"
+                        if (obj.labels.isNotEmpty()) {
+                            labelText = obj.labels[0].text
+                        }
+
+                        if (isGeometricCircle || labelText.contains("Ball", true)) {
+                            roundObjects.add("$labelText (Ratio: ${String.format("%.2f", ratio)})")
+                        }
+                    }
+
+                    labeler.process(image)
+                        .addOnSuccessListener { labels ->
+                            val relevantScenes = labels
+                                .filter { it.confidence > 0.6 }
+                                .map { it.text }
+                                .take(3)
+                                .joinToString(", ")
+
+                            val objStr = if(roundObjects.isEmpty()) "None" else roundObjects.joinToString(", ")
+
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastUpdate > 200) {
+                                lastUpdate = currentTime
+                                runOnUiThread {
+                                    val map = HashMap<String, String>()
+                                    map["scene"] = relevantScenes
+                                    map["objects"] = objStr
+                                    eventSink?.success(map)
+                                }
+                            }
+                        }
+                        .addOnCompleteListener { imageProxy.close() }
+                }
+                .addOnFailureListener { 
+                    imageProxy.close() 
+                }
         } else {
             imageProxy.close()
         }
@@ -228,26 +286,19 @@ class MainActivity: FlutterActivity() {
         return count
     }
 
-    // Извлечение боксов из выхода модели (YOLOv8: x, y, w, h - нормализованные 0-1)
-    private fun extractBoxesFromOutput(output: Array<Array<FloatArray>>): List<Map<String, Double>> {
-        val boxes = mutableListOf<Map<String, Double>>()
+    // Извлечение боксов из выхода модели (YOLOv8: x, y, w, h)
+    private fun extractBoxesFromOutput(output: Array<Array<FloatArray>>): List<List<Double>> {
+        val boxes = mutableListOf<List<Double>>()
         for (i in 0 until 8400) {
-            val conf = output[0][4][i].toDouble()
-            if (conf > 0.3) {
-                val x = (output[0][0][i] / 640.0).toDouble()
-                val y = (output[0][1][i] / 640.0).toDouble()
-                val w = (output[0][2][i] / 640.0).toDouble()
-                val h = (output[0][3][i] / 640.0).toDouble()
-                boxes.add(mapOf(
-                    "x" to x,
-                    "y" to y,
-                    "w" to w,
-                    "h" to h,
-                    "conf" to conf
-                ))
+            val conf = output[0][4][i]
+            if (conf > 0.3f) {
+                val x = output[0][0][i]
+                val y = output[0][1][i]
+                val w = output[0][2][i]
+                val h = output[0][3][i]
+                boxes.add(listOf(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble()))
             }
         }
         return boxes
     }
 }
-
