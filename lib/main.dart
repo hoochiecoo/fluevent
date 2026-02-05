@@ -26,6 +26,7 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
+  Map? _lastEvent;
   Map? _tfliteStatus;
 
   static const MethodChannel _methodChannel = MethodChannel('com.example.camera/methods');
