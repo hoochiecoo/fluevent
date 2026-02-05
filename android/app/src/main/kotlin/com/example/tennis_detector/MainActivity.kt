@@ -2,6 +2,7 @@ package com.example.tennis_detector
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -16,10 +17,13 @@ import org.tensorflow.lite.Interpreter
 
 import java.util.concurrent.Executors
 
+private const val TAG = "TFLiteDetector"
+
 class MainActivity: FlutterActivity() {
     private fun initTFLiteModel() {
         if (tfliteInterpreter != null) return
         try {
+            addDebugLog("▶ Loading TFLite model...")
             val assetManager = this.assets
             val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
             val fileInputStream = fileDescriptor.createInputStream()
@@ -30,8 +34,38 @@ class MainActivity: FlutterActivity() {
             fileInputStream.close()
             fileDescriptor.close()
             tfliteInterpreter = Interpreter(modelBuffer)
+            addDebugLog("✓ TFLite model loaded (${declaredLength/1024/1024}MB)")
         } catch (e: Exception) {
-            e.printStackTrace()
+            addDebugLog("✗ Model load failed: ${e.javaClass.simpleName}")
+            sendError("Model Error: ${e.message}")
+        }
+    }
+
+    private fun sendError(message: String) {
+        try {
+            eventSink?.success(mapOf("error" to message, "detections" to emptyList<Map<String, Any>>()))
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ Error channel failed: ${e.message}")
+        }
+    }
+    
+    private fun addDebugLog(message: String) {
+        debugLogs.add("[${System.currentTimeMillis() % 100000}] $message")
+        if (debugLogs.size > 50) debugLogs.removeAt(0)
+        Log.i(TAG, message)
+    }
+    
+    private fun sendDebugInfo(detections: List<Map<String, Any>>) {
+        try {
+            val map = HashMap<String, Any>()
+            map["detections"] = detections
+            map["count"] = detections.size
+            map["logs"] = debugLogs.toList()
+            map["inferenceTime"] = inferenceTime
+            map["frameCount"] = frameCount
+            eventSink?.success(map)
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ Debug send failed: ${e.message}")
         }
     }
     private fun isTFLiteAvailable(): Boolean {
@@ -60,6 +94,10 @@ class MainActivity: FlutterActivity() {
     private var eventSink: EventChannel.EventSink? = null
     private var tfliteInterpreter: Interpreter? = null
     private var lastUpdate = 0L
+    
+    private val debugLogs = mutableListOf<String>()
+    private var inferenceTime = 0L
+    private var frameCount = 0
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -69,10 +107,13 @@ class MainActivity: FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startCamera" -> {
+                    addDebugLog("▶ Camera start requested...")
                     if (checkPermissions()) {
                         val tid = startCamera(flutterEngine)
+                        addDebugLog("✓ Camera texture created: $tid")
                         result.success(tid)
                     } else {
+                        addDebugLog("✗ Camera permission denied")
                         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 101)
                         result.error("PERM", "Permissions needed", null)
                     }
@@ -120,7 +161,11 @@ class MainActivity: FlutterActivity() {
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer)
-            } catch(e: Exception) {}
+                addDebugLog("✓ Camera bound successfully")
+            } catch(e: Exception) {
+                addDebugLog("✗ Camera bind failed: ${e.javaClass.simpleName}")
+                sendError("Camera: ${e.message}")
+            }
 
         }, ContextCompat.getMainExecutor(this))
 
@@ -129,32 +174,41 @@ class MainActivity: FlutterActivity() {
 
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null && tfliteInterpreter != null) {
-            try {
-                val bitmap = imageProxy.toBitmap(640, 640)
-                val input = bitmapToInputArray(bitmap)
-                val output = Array(1) { Array(84) { FloatArray(8400) } }
-                
-                tfliteInterpreter!!.run(input, output)
-                
-                val detections = parseDetections(output)
-                val currentTime = System.currentTimeMillis()
-                
-                if (currentTime - lastUpdate > 200) {
-                    lastUpdate = currentTime
-                    runOnUiThread {
-                        val map = HashMap<String, Any>()
-                        map["detections"] = detections
-                        map["count"] = detections.size
-                        eventSink?.success(map)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+        try {
+            frameCount++
+            val startTime = System.currentTimeMillis()
+            
+            val mediaImage = imageProxy.image
+            if (mediaImage == null) {
+                addDebugLog("⚠ Frame $frameCount: null image")
+                return
             }
+            
+            if (tfliteInterpreter == null) {
+                addDebugLog("⚠ Interpreter not ready")
+                return
+            }
+            
+            val bitmap = imageProxy.toBitmap(640, 640)
+            val input = bitmapToInputArray(bitmap)
+            val output = Array(1) { Array(84) { FloatArray(8400) } }
+            
+            tfliteInterpreter!!.run(input, output)
+            
+            val detections = parseDetections(output)
+            inferenceTime = System.currentTimeMillis() - startTime
+            val currentTime = System.currentTimeMillis()
+            
+            if (currentTime - lastUpdate > 200) {
+                lastUpdate = currentTime
+                sendDebugInfo(detections)
+            }
+        } catch (e: Exception) {
+            addDebugLog("✗ Process error: ${e.javaClass.simpleName}")
+            sendError("Inference: ${e.message}")
+        } finally {
+            imageProxy.close()
         }
-        imageProxy.close()
     }
 
     private fun checkPermissions() = ContextCompat.checkSelfPermission(baseContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
