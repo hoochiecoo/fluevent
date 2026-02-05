@@ -12,20 +12,14 @@ import io.flutter.plugin.common.EventChannel
 
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
-
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.label.ImageLabeling
-import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
-import com.google.mlkit.vision.objects.ObjectDetection
-import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import org.tensorflow.lite.Interpreter
 
 import java.util.concurrent.Executors
 
 class MainActivity: FlutterActivity() {
-    // Минимальный запуск модели для теста
-    private fun runTFLiteModel(): String {
-        return try {
+    private fun initTFLiteModel() {
+        if (tfliteInterpreter != null) return
+        try {
             val assetManager = this.assets
             val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
             val fileInputStream = fileDescriptor.createInputStream()
@@ -35,15 +29,9 @@ class MainActivity: FlutterActivity() {
             val modelBuffer = fileChannel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
             fileInputStream.close()
             fileDescriptor.close()
-            val interpreter = Interpreter(modelBuffer)
-            // Dummy input: [1, 640, 640, 3] float32 (или float16, если требуется)
-            val input = Array(1) { Array(640) { Array(640) { FloatArray(3) } } }
-            // Dummy output: YOLOv8 обычно [1, 84, 8400]
-            val output = Array(1) { Array(84) { FloatArray(8400) } }
-            interpreter.run(input, output)
-            "Output shape: [${output.size}, ${output[0].size}, ${output[0][0].size}]"
+            tfliteInterpreter = Interpreter(modelBuffer)
         } catch (e: Exception) {
-            "Model run error: ${e.message}"
+            e.printStackTrace()
         }
     }
     private fun isTFLiteAvailable(): Boolean {
@@ -70,19 +58,13 @@ class MainActivity: FlutterActivity() {
     private val EVENT_CHANNEL = "com.example.camera/events"
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var eventSink: EventChannel.EventSink? = null
-
-    private val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
-
-    private val objectOptions = ObjectDetectorOptions.Builder()
-        .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
-        .enableClassification()
-        .build()
-    private val objectDetector = ObjectDetection.getClient(objectOptions)
-
+    private var tfliteInterpreter: Interpreter? = null
     private var lastUpdate = 0L
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        
+        initTFLiteModel()
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -96,17 +78,10 @@ class MainActivity: FlutterActivity() {
                     }
                 }
                 "isTFLiteAvailable" -> {
-                    val tfliteOk = isTFLiteAvailable()
                     val modelOk = isModelLoadable()
-                    result.success(mapOf("tflite" to tfliteOk, "model" to modelOk))
+                    result.success(mapOf("model" to modelOk))
                 }
-                "runTFLiteModel" -> {
-                    val output = runTFLiteModel()
-                    result.success(output)
-                }
-                else -> {
-                    result.notImplemented()
-                }
+                else -> result.notImplemented()
             }
         }
 
@@ -152,76 +127,34 @@ class MainActivity: FlutterActivity() {
         return textureId
     }
 
-    private var frameId = 0
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
-        frameId++
-        var stage = "FRAME_IN"
-        var ok = true
-        var info = ""
-        var tfliteTried = false
-        var tfliteOk = false
-        val currFrameId = frameId
-        fun send(stage: String, ok: Boolean, info: String) {
-            val map = HashMap<String, Any>()
-            map["frameId"] = currFrameId
-            map["stage"] = stage
-            map["ok"] = ok
-            map["info"] = info
-            eventSink?.success(map)
-        }
-        send("FRAME_IN", true, "")
-        try {
-            val mediaImage = imageProxy.image
-            if (mediaImage == null) {
-                send("FRAME_OUT", false, "mediaImage is null")
-                ok = false
-                return
-            }
-            // Bitmap
-            val bitmap = try {
-                val bmp = imageProxy.toBitmap(640, 640)
-                send("BITMAP_OK", true, "")
-                bmp
-            } catch (e: Exception) {
-                send("FRAME_OUT", false, "bitmap error: ${e.message}")
-                ok = false
-                return
-            }
-            // TFLite
-            send("TFLITE_START", true, "")
-            tfliteTried = true
+        val mediaImage = imageProxy.image
+        if (mediaImage != null && tfliteInterpreter != null) {
             try {
-                val assetManager = this.assets
-                val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
-                val fileInputStream = fileDescriptor.createInputStream()
-                val fileChannel = fileInputStream.channel
-                val startOffset = fileDescriptor.startOffset
-                val declaredLength = fileDescriptor.length
-                val modelBuffer = fileChannel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-                fileInputStream.close()
-                fileDescriptor.close()
-                val interpreter = Interpreter(modelBuffer)
+                val bitmap = imageProxy.toBitmap(640, 640)
                 val input = bitmapToInputArray(bitmap)
                 val output = Array(1) { Array(84) { FloatArray(8400) } }
-                interpreter.run(input, output)
-                val objectCount = countObjectsFromOutput(output)
-                send("TFLITE_OK", true, "objectCount: $objectCount")
-                tfliteOk = true
+                
+                tfliteInterpreter!!.run(input, output)
+                
+                val detections = parseDetections(output)
+                val currentTime = System.currentTimeMillis()
+                
+                if (currentTime - lastUpdate > 200) {
+                    lastUpdate = currentTime
+                    runOnUiThread {
+                        val map = HashMap<String, Any>()
+                        map["detections"] = detections
+                        map["count"] = detections.size
+                        eventSink?.success(map)
+                    }
+                }
             } catch (e: Exception) {
-                send("TFLITE_ERROR", false, "${e.message}")
-                ok = false
+                e.printStackTrace()
             }
-            if (!tfliteTried || !tfliteOk) {
-                send("TFLITE_ERROR", false, if (!tfliteTried) "not tried" else "error")
-            }
-        } catch (e: Exception) {
-            send(stage, false, "${e.message}")
-            ok = false
-        } finally {
-            send("FRAME_OUT", ok, info)
-            imageProxy.close()
         }
+        imageProxy.close()
     }
 
     private fun checkPermissions() = ContextCompat.checkSelfPermission(baseContext, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -275,9 +208,33 @@ class MainActivity: FlutterActivity() {
         return count
     }
 
-    // Извлечение боксов из выхода модели (YOLOv8: x, y, w, h)
-    private fun extractBoxesFromOutput(output: Array<Array<FloatArray>>): List<List<Double>> {
-        val boxes = mutableListOf<List<Double>>()
+    // Подсчёт объектов по выходу модели (confidence > 0.3)
+    private fun countObjectsFromOutput(output: Array<Array<FloatArray>>): Int {
+        var count = 0
+        for (i in 0 until 8400) {
+            val conf = output[0][4][i]
+            if (conf > 0.3f) count++
+        }
+        return count
+    }
+
+    // Парсинг детекций из выхода YOLOv8
+    private fun parseDetections(output: Array<Array<FloatArray>>): List<Map<String, Any>> {
+        val detections = mutableListOf<Map<String, Any>>()
+        val COCO_CLASSES = arrayOf(
+            "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck",
+            "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+            "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe",
+            "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis",
+            "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard",
+            "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife",
+            "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot",
+            "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed",
+            "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard",
+            "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
+            "scissors", "teddy bear", "hair drier", "toothbrush"
+        )
+        
         for (i in 0 until 8400) {
             val conf = output[0][4][i]
             if (conf > 0.3f) {
@@ -285,9 +242,29 @@ class MainActivity: FlutterActivity() {
                 val y = output[0][1][i]
                 val w = output[0][2][i]
                 val h = output[0][3][i]
-                boxes.add(listOf(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble()))
+                
+                var classId = 0
+                var maxClassProb = 0f
+                for (classIdx in 5 until 85) {
+                    val prob = output[0][classIdx][i]
+                    if (prob > maxClassProb) {
+                        maxClassProb = prob
+                        classId = classIdx - 5
+                    }
+                }
+                
+                val className = if (classId < COCO_CLASSES.size) COCO_CLASSES[classId] else "unknown"
+                
+                detections.add(mapOf(
+                    "class" to className,
+                    "confidence" to String.format("%.2f", (conf * 100).toInt()),
+                    "x" to x.toDouble(),
+                    "y" to y.toDouble(),
+                    "w" to w.toDouble(),
+                    "h" to h.toDouble()
+                ))
             }
         }
-        return boxes
+        return detections
     }
 }
