@@ -90,82 +90,19 @@ class _CameraScreenState extends State<CameraScreen> {
       body: Column(
         children: [
           Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _textureId == null 
-                    ? const Center(child: CircularProgressIndicator())
-                    : Texture(textureId: _textureId!),
-                // Overlay bounding boxes from TFLite
-                ..._boxes.map((box) {
-                  final left = box[0];
-                  final top = box[1];
-                  final width = box[2];
-                  final height = box[3];
-                  return Positioned(
-                    left: left,
-                    top: top,
-                    width: width,
-                    height: height,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.red, width: 2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  );
-                }).toList(),
-                if (_isCourt)
-                  Positioned(
-                    top: 20, right: 20,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(8)),
-                      child: const Text("🎾 TENNIS COURT DETECTED", style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  )
-              ],
-            ),
+            child: _textureId == null
+                ? const Center(child: CircularProgressIndicator())
+                : Texture(textureId: _textureId!),
           ),
           Container(
             padding: const EdgeInsets.all(20),
             color: Colors.black87,
             width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("SCENE ANALYSIS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                Text(_sceneData, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Text("POSSIBLE ROUND OBJECTS:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    const SizedBox(width: 8),
-                    Text(
-                      _tfliteStatus == null
-                        ? "(TFLite: ...)"
-                        : (_tfliteStatus!["tflite"] == true
-                            ? (_tfliteStatus!["model"] == true
-                                ? "(TFLite: OK, Model: OK)"
-                                : "(TFLite: OK, Model: Not found)")
-                            : "(TFLite: Not found)"),
-                      style: TextStyle(
-                        color: _tfliteStatus == null
-                            ? Colors.grey
-                            : (_tfliteStatus!["tflite"] == true
-                                ? (_tfliteStatus!["model"] == true ? Colors.green : Colors.orange)
-                                : Colors.red),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
-                const SizedBox(height: 8),
-                Text(_tfliteOutput, style: const TextStyle(fontSize: 12, color: Colors.lightBlueAccent)),
-
-              ],
+            child: SingleChildScrollView(
+              child: Text(
+                _lastEvent == null ? 'Нет данных от Kotlin' : _lastEvent.toString(),
+                style: const TextStyle(fontSize: 14, color: Colors.white),
+              ),
             ),
           )
         ],
