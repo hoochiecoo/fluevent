@@ -35,7 +35,7 @@ class _CameraScreenState extends State<CameraScreen> {
   String _sceneData = "Scanning...";
   String _objectData = "No objects";
   String _tfliteOutput = "";
-  List<Map<String, dynamic>> _boxes = [];
+  List<List<double>> _boxes = [];
   bool _isCourt = false;
 
   @override
@@ -50,7 +50,7 @@ class _CameraScreenState extends State<CameraScreen> {
         setState(() {
           _sceneData = data['scene'] ?? "";
           _objectData = data['objects'] ?? "";
-          _boxes = (data['boxes'] as List<dynamic>?)?.map((b) => Map<String, dynamic>.from(b as Map)).toList() ?? [];
+          _boxes = (data['boxes'] as List<dynamic>?)?.map((b) => List<double>.from(b)).toList() ?? [];
         });
       }
     });
@@ -96,8 +96,25 @@ class _CameraScreenState extends State<CameraScreen> {
                 _textureId == null 
                     ? const Center(child: CircularProgressIndicator())
                     : Texture(textureId: _textureId!),
-                // Draw bounding boxes with CustomPaint
-                // _BoundingBoxPainter(boxes: _boxes),
+                // Overlay bounding boxes from TFLite
+                ..._boxes.map((box) {
+                  final left = box[0];
+                  final top = box[1];
+                  final width = box[2];
+                  final height = box[3];
+                  return Positioned(
+                    left: left,
+                    top: top,
+                    width: width,
+                    height: height,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.red, width: 2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  );
+                }).toList(),
                 if (_isCourt)
                   Positioned(
                     top: 20, right: 20,
@@ -146,30 +163,6 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
                 Text(_objectData, style: const TextStyle(fontSize: 16, color: Colors.orangeAccent)),
                 const SizedBox(height: 8),
-                const Text("DETECTED BOXES:", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                if (_boxes.isEmpty)
-                  const Text("No boxes detected", style: TextStyle(fontSize: 12, color: Colors.grey))
-                else
-                  Expanded(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _boxes.length,
-                      itemBuilder: (context, idx) {
-                        final box = _boxes[idx];
-                        final x = (box['x'] as num?)?.toDouble() ?? 0;
-                        final y = (box['y'] as num?)?.toDouble() ?? 0;
-                        final w = (box['w'] as num?)?.toDouble() ?? 0;
-                        final h = (box['h'] as num?)?.toDouble() ?? 0;
-                        final conf = (box['conf'] as num?)?.toDouble() ?? 0;
-                        return Text(
-                          '#${idx + 1}: conf=${(conf * 100).toStringAsFixed(1)}% x=${(x * 100).toStringAsFixed(0)}% y=${(y * 100).toStringAsFixed(0)}% w=${(w * 100).toStringAsFixed(0)}% h=${(h * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(fontSize: 10, color: Colors.cyan),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      },
-                    ),
-                  ),
                 Text(_tfliteOutput, style: const TextStyle(fontSize: 12, color: Colors.lightBlueAccent)),
 
               ],
@@ -179,66 +172,4 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
     );
   }
-}
-
-// CustomPainter для рисования bounding boxes
-class _BoundingBoxPainter extends StatelessWidget {
-  final List<Map<String, dynamic>> boxes;
-
-  const _BoundingBoxPainter({required this.boxes});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _BoxPainter(boxes: boxes),
-      size: Size.infinite,
-    );
-  }
-}
-
-class _BoxPainter extends CustomPainter {
-  final List<Map<String, dynamic>> boxes;
-
-  _BoxPainter({required this.boxes});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.red
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    for (final box in boxes) {
-      // Получаем нормализованные координаты (0-1)
-      final x = (box['x'] as num?)?.toDouble() ?? 0;
-      final y = (box['y'] as num?)?.toDouble() ?? 0;
-      final w = (box['w'] as num?)?.toDouble() ?? 0;
-      final h = (box['h'] as num?)?.toDouble() ?? 0;
-      final conf = (box['conf'] as num?)?.toDouble() ?? 0;
-
-      // Преобразуем в пиксели экрана
-      final left = x * size.width;
-      final top = y * size.height;
-      final width = w * size.width;
-      final height = h * size.height;
-
-      // Рисуем прямоугольник
-      final rect = Rect.fromLTWH(left, top, width, height);
-      canvas.drawRect(rect, paint);
-
-      // Рисуем confidence label
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: '${(conf * 100).toStringAsFixed(0)}%',
-          style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(left + 2, top + 2));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BoxPainter oldDelegate) => oldDelegate.boxes != boxes;
 }
