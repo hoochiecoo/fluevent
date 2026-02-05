@@ -97,7 +97,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : Texture(textureId: _textureId!),
                 // Draw bounding boxes with CustomPaint
-                _BoundingBoxPainter(boxes: _boxes),
+                // _BoundingBoxPainter(boxes: _boxes),
                 if (_isCourt)
                   Positioned(
                     top: 20, right: 20,
