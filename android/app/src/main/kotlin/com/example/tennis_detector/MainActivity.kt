@@ -152,11 +152,45 @@ class MainActivity: FlutterActivity() {
         return textureId
     }
 
+    private var frameId = 0
     @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            // --- TFLite инференс на реальном кадре ---
+        frameId++
+        var stage = "FRAME_IN"
+        var ok = true
+        var info = ""
+        var tfliteTried = false
+        var tfliteOk = false
+        val currFrameId = frameId
+        fun send(stage: String, ok: Boolean, info: String) {
+            val map = HashMap<String, Any>()
+            map["frameId"] = currFrameId
+            map["stage"] = stage
+            map["ok"] = ok
+            map["info"] = info
+            eventSink?.success(map)
+        }
+        send("FRAME_IN", true, "")
+        try {
+            val mediaImage = imageProxy.image
+            if (mediaImage == null) {
+                send("FRAME_OUT", false, "mediaImage is null")
+                ok = false
+                return
+            }
+            // Bitmap
+            val bitmap = try {
+                val bmp = imageProxy.toBitmap(640, 640)
+                send("BITMAP_OK", true, "")
+                bmp
+            } catch (e: Exception) {
+                send("FRAME_OUT", false, "bitmap error: ${e.message}")
+                ok = false
+                return
+            }
+            // TFLite
+            send("TFLITE_START", true, "")
+            tfliteTried = true
             try {
                 val assetManager = this.assets
                 val fileDescriptor = assetManager.openFd("yolov8n_float16.tflite")
@@ -168,69 +202,24 @@ class MainActivity: FlutterActivity() {
                 fileInputStream.close()
                 fileDescriptor.close()
                 val interpreter = Interpreter(modelBuffer)
-                // Преобразуем кадр в 640x640 float32
-                val bitmap = imageProxy.toBitmap(640, 640)
                 val input = bitmapToInputArray(bitmap)
                 val output = Array(1) { Array(84) { FloatArray(8400) } }
                 interpreter.run(input, output)
                 val objectCount = countObjectsFromOutput(output)
-                runOnUiThread {
-                    val boxes = extractBoxesFromOutput(output)
-                    val map = HashMap<String, Any>()
-                    map["objects"] = "TFLite objects: $objectCount"
-                    map["boxes"] = boxes
-                    eventSink?.success(map)
-                }
-            } catch (_: Exception) {}
-            // --- MLKit (старый код) ---
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            
-            objectDetector.process(image)
-                .addOnSuccessListener { objects ->
-                    val roundObjects = ArrayList<String>()
-                    
-                    for (obj in objects) {
-                        val bounds = obj.boundingBox
-                        val ratio = bounds.width().toFloat() / bounds.height().toFloat()
-                        val isGeometricCircle = ratio > 0.8 && ratio < 1.2
-
-                        var labelText = "Unknown"
-                        if (obj.labels.isNotEmpty()) {
-                            labelText = obj.labels[0].text
-                        }
-
-                        if (isGeometricCircle || labelText.contains("Ball", true)) {
-                            roundObjects.add("$labelText (Ratio: ${String.format("%.2f", ratio)})")
-                        }
-                    }
-
-                    labeler.process(image)
-                        .addOnSuccessListener { labels ->
-                            val relevantScenes = labels
-                                .filter { it.confidence > 0.6 }
-                                .map { it.text }
-                                .take(3)
-                                .joinToString(", ")
-
-                            val objStr = if(roundObjects.isEmpty()) "None" else roundObjects.joinToString(", ")
-
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastUpdate > 200) {
-                                lastUpdate = currentTime
-                                runOnUiThread {
-                                    val map = HashMap<String, String>()
-                                    map["scene"] = relevantScenes
-                                    map["objects"] = objStr
-                                    eventSink?.success(map)
-                                }
-                            }
-                        }
-                        .addOnCompleteListener { imageProxy.close() }
-                }
-                .addOnFailureListener { 
-                    imageProxy.close() 
-                }
-        } else {
+                send("TFLITE_OK", true, "objectCount: $objectCount")
+                tfliteOk = true
+            } catch (e: Exception) {
+                send("TFLITE_ERROR", false, "${e.message}")
+                ok = false
+            }
+            if (!tfliteTried || !tfliteOk) {
+                send("TFLITE_ERROR", false, if (!tfliteTried) "not tried" else "error")
+            }
+        } catch (e: Exception) {
+            send(stage, false, "${e.message}")
+            ok = false
+        } finally {
+            send("FRAME_OUT", ok, info)
             imageProxy.close()
         }
     }
