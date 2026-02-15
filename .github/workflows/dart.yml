@@ -11,40 +11,33 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    # Шаг 1: Кэширование зависимостей Pub (для flutter pub get)
-    # Мы создаем кэш для папки .pub-cache. Ключ кэша зависит от содержимого
-    # файла pubspec.lock. Если файл не менялся, кэш будет восстановлен.
-    - name: Cache Flutter pub dependencies
+    # НОВЫЙ ШАГ: Кэширование зависимостей Pub
+    # Этот шаг должен идти ПЕРЕД установкой Flutter и запуском `pub get`
+    - name: Cache Flutter pub dependencies1
       uses: actions/cache@v4
       with:
-        path: ${{ env.PUB_CACHE }}
+        # Путь к папке, где Flutter хранит скачанные пакеты.
+        # На Linux-машинах GitHub это ~/.pub-cache
+        path: ~/.pub-cache
+        # Уникальный ключ для нашего кэша. Он состоит из:
+        # 1. Типа операционной системы (runner.os)
+        # 2. Строки "pub-" для ясности
+        # 3. Хэша файла pubspec.lock. Если файл не меняется, хэш остается прежним.
         key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+        # Ключ для восстановления, если точное совпадение не найдено.
+        # Полезно, если вы, например, удалили одну зависимость. Он может
+        # восстановить старый кэш, и pub get докачает только недостающее.
         restore-keys: |
           ${{ runner.os }}-pub-
 
-    # Шаг 2: Кэширование зависимостей Gradle (для Android сборки)
-    # Кэшируем папку .gradle/caches, где хранятся все скачанные Gradle-библиотеки.
-    # Ключ зависит от файлов конфигурации Gradle.
-    - name: Cache Gradle dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.gradle/caches
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-
     - uses: subosito/flutter-action@v2
       with:
-        # Указание точной версии немного надежнее и может быть чуть быстрее,
-        # чем 'stable', так как не нужно проверять, какая версия сейчас последняя.
-        flutter-version: '3.19.6' # Замените на вашу версию Flutter
         channel: 'stable'
-        cache: true
+        cache: true # Этот кэш для самого SDK Flutter, его оставляем
 
     - run: flutter pub get
 
-    # Добавляем --no-pub, так как мы уже выполнили pub get на предыдущем шаге.
-    - run: flutter build apk --debug --no-pub
+    - run: flutter build apk --debug
 
     - uses: actions/upload-artifact@v4
       with:
